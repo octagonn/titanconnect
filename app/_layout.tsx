@@ -14,21 +14,42 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated, currentUser } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
     if (isLoading) return;
 
-    const inAuthGroup = segments[0] === '(tabs)';
+    const rootSegment = segments[0];
+    const inTabsGroup = rootSegment === '(tabs)';
+    const inStudentOnboarding = rootSegment === 'setup-profile';
+    const inFacultyOnboarding = rootSegment === 'setup-faculty';
+    const inOnboarding = inStudentOnboarding || inFacultyOnboarding;
 
-    if (!isAuthenticated && inAuthGroup) {
-      router.replace('/welcome');
-    } else if (isAuthenticated && !inAuthGroup) {
+    if (!isAuthenticated) {
+      if (inTabsGroup || inOnboarding) {
+        router.replace('/welcome');
+      }
+      return;
+    }
+
+    const needsOnboarding = currentUser && !currentUser.isProfileComplete;
+
+    if (needsOnboarding) {
+      const target =
+        currentUser?.role === 'faculty' ? '/setup-faculty' : '/setup-profile';
+
+      if (!inOnboarding || (currentUser.role === 'faculty' && !inFacultyOnboarding)) {
+        router.replace(target);
+      }
+      return;
+    }
+
+    if (isAuthenticated && !inTabsGroup) {
       router.replace('/(tabs)/home');
     }
-  }, [isLoading, isAuthenticated, segments, router]);
+  }, [isLoading, isAuthenticated, currentUser, segments, router]);
 
   if (isLoading) {
     return null;
@@ -48,8 +69,13 @@ function RootLayoutNav() {
       }}
     >
       <Stack.Screen name="welcome" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="auth/email-password"
+        options={{ title: "Sign In", headerShown: true }}
+      />
       <Stack.Screen name="verify-email" options={{ headerShown: false }} />
       <Stack.Screen name="setup-profile" options={{ headerShown: false }} />
+      <Stack.Screen name="setup-faculty" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen
         name="chat/[id]"

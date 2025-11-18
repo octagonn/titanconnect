@@ -3,10 +3,21 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "bunx rork start -p lz9l5nl6bp255r5fqwdv3 --tunnel",
-    "start-web": "bunx rork start -p lz9l5nl6bp255r5fqwdv3 --web --tunnel",
-    "start-web-dev": "DEBUG=expo* bunx rork start -p lz9l5nl6bp255r5fqwdv3 --web --tunnel",
-    "lint": "expo lint"
+    "start": "expo start --tunnel",
+    "start:lan": "expo start",
+    "start:web": "expo start --web",
+    "start:web:dev": "DEBUG=expo* expo start --web",
+    "start:ios": "expo start --ios",
+    "start:android": "expo start --android",
+    "lint": "expo lint",
+    "supabase": "supabase",
+    "supabase:link": "supabase link --project-ref gzfhfwiizdlptcxsdqxt",
+    "supabase:status": "supabase status",
+    "supabase:db:push": "supabase db push",
+    "supabase:db:pull": "supabase db pull",
+    "supabase:db:reset": "supabase db reset",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop"
   },
   "dependencies": {
     "@ai-sdk/react": "^2.0.81",
@@ -40,7 +51,7 @@
     "expo-system-ui": "~6.0.8",
     "expo-web-browser": "^15.0.8",
     "hono": "^4.10.3",
-    "lucide-react-native": "^0.475.0",
+    "lucide-react-native": "^0.554.0",
     "nativewind": "^4.1.23",
     "react": "19.1.0",
     "react-dom": "19.1.0",
@@ -60,6 +71,7 @@
     "@types/react": "~19.1.10",
     "eslint": "9.31.0",
     "eslint-config-expo": "9.2.0",
+    "supabase": "^2.58.5",
     "typescript": "~5.9.2"
   },
   "private": true

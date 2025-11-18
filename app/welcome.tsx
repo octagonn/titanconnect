@@ -11,16 +11,19 @@ import {
   Platform,
   Animated,
   Image,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
+import { useResponsiveLayout } from '@/lib/responsive';
 
 export default function WelcomeScreen() {
   const router = useRouter();
   const [email, setEmail] = useState<string>('');
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(30));
+  const { isSmallHeight, isLargeHeight, insets } = useResponsiveLayout();
 
   useEffect(() => {
     Animated.parallel([
@@ -38,14 +41,30 @@ export default function WelcomeScreen() {
   }, [fadeAnim, slideAnim]);
 
   const handleContinue = () => {
-    if (email.toLowerCase().endsWith('@csu.fullerton.edu')) {
-      router.push({
-        pathname: '/verify-email',
-        params: { email },
-      });
-    } else {
-      alert('Please use your CSUF email (@csu.fullerton.edu)');
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      alert('Please enter your CSUF or Fullerton email');
+      return;
     }
+
+    let role: 'student' | 'faculty' | null = null;
+
+    if (normalizedEmail.endsWith('@csu.fullerton.edu')) {
+      role = 'student';
+    } else if (normalizedEmail.endsWith('@fullerton.edu')) {
+      role = 'faculty';
+    }
+
+    if (!role) {
+      alert('Please use your CSUF or Fullerton email (@csu.fullerton.edu or @fullerton.edu)');
+      return;
+    }
+
+    router.push({
+      pathname: '/auth/email-password',
+      params: { email: normalizedEmail, role },
+    });
   };
 
   return (
@@ -61,10 +80,17 @@ export default function WelcomeScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardView}
         >
-          <Animated.View
-            style={{ flex: 1 }}
-          >
-            <View style={styles.scrollContent}>
+          <Animated.View style={{ flex: 1 }}>
+            <ScrollView
+              contentContainerStyle={[
+                styles.scrollContent,
+                isSmallHeight && styles.scrollContentSmall,
+                isLargeHeight && styles.scrollContentLarge,
+                { paddingBottom: (isSmallHeight ? 16 : 32) + insets.bottom },
+              ]}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
               <Animated.View 
                 style={[
                   styles.header,
@@ -74,15 +100,19 @@ export default function WelcomeScreen() {
                   },
                 ]}
               >
-              <View style={styles.logoContainer}>
+              <View style={[
+                styles.logoContainer,
+                isLargeHeight && styles.logoContainerLarge
+              ]}
+              >
                 <Image 
-                  source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/m6lclsym72r3z5xyhxqhn' }}
-                  style={styles.logo}
+                  source={require('@/assets/images/icon.png')}
+                  style={[styles.logo, isLargeHeight && styles.logoLarge]}
                   resizeMode="contain"
                 />
               </View>
-              <Text style={styles.title}>TitanConnect</Text>
-              <Text style={styles.subtitle}>Your campus, your community</Text>
+              <Text style={[styles.title, isLargeHeight && styles.titleLarge]}>TitanConnect</Text>
+              <Text style={[styles.subtitle, isLargeHeight && styles.subtitleLarge]}>Your campus, your community</Text>
               <View style={styles.badge}>
                 <Shield size={14} color={Colors.light.accent} />
                 <Text style={styles.badgeText}>CSUF Verified Only</Text>
@@ -122,13 +152,13 @@ export default function WelcomeScreen() {
             <View style={styles.form}>
               <View style={styles.formCard}>
                 <Text style={styles.formTitle}>Get Started</Text>
-                <Text style={styles.formSubtitle}>Sign in with your CSUF email</Text>
+                <Text style={styles.formSubtitle}>Use your CSUF or Fullerton email</Text>
                 
                 <View style={styles.inputContainer}>
                   <Mail size={20} color={Colors.light.placeholder} style={styles.inputIcon} />
                   <TextInput
                     style={styles.input}
-                    placeholder="yourname@csu.fullerton.edu"
+                    placeholder="yourname@csu.fullerton.edu or faculty@fullerton.edu"
                     placeholderTextColor={Colors.light.placeholder}
                     value={email}
                     onChangeText={setEmail}
@@ -158,7 +188,7 @@ export default function WelcomeScreen() {
                 </View>
               </View>
             </View>
-            </View>
+            </ScrollView>
           </Animated.View>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -184,38 +214,63 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: 24,
-    paddingTop: 0,
-    paddingBottom: 8,
-    justifyContent: 'space-between',
+    paddingTop: 32,
+    paddingBottom: 24,
+    justifyContent: 'flex-start',
+    gap: 24,
+  },
+  scrollContentSmall: {
+    paddingTop: 16,
+  },
+  scrollContentLarge: {
+    paddingTop: 72,
+    gap: 36,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 8,
   },
   logoContainer: {
-    marginBottom: -45,
+    marginBottom: -24,
     alignItems: 'center',
   },
+  logoContainerLarge: {
+    marginTop: 16,
+    marginBottom: 24,
+  },
   logo: {
-    width: 90,
-    height: 90,
+    width: 170,
+    height: 170,
+  },
+  logoLarge: {
+    width: 260,
+    height: 260,
   },
   title: {
-    fontSize: 24,
+    fontSize: 30,
     fontWeight: '800' as const,
     color: '#ffffff',
-    marginBottom: 2,
-    marginTop: 0,
+    marginBottom: 4,
+    marginTop: 4,
     letterSpacing: -0.5,
   },
+  titleLarge: {
+    fontSize: 44,
+    marginTop: 20,
+    marginBottom: 10,
+  },
   subtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: 'rgba(255, 255, 255, 0.85)',
     textAlign: 'center',
     marginBottom: 5,
     fontWeight: '500' as const,
+  },
+  subtitleLarge: {
+    fontSize: 18,
+    marginBottom: 10,
   },
   badge: {
     flexDirection: 'row',
@@ -229,27 +284,27 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   badgeText: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#ffffff',
     fontWeight: '600' as const,
   },
   featuresContainer: {
-    marginBottom: 8,
-    gap: 4,
+    marginBottom: 12,
+    gap: 8,
   },
   featureCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    borderRadius: 10,
-    padding: 6,
+    borderRadius: 14,
+    padding: 10,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   featureIconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -259,23 +314,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   featureTitle: {
-    fontSize: 12,
+    fontSize: 15,
     color: '#ffffff',
     fontWeight: '700' as const,
     marginBottom: 0,
   },
   featureDesc: {
-    fontSize: 11,
+    fontSize: 14,
     color: 'rgba(255, 255, 255, 0.75)',
     fontWeight: '500' as const,
   },
   form: {
-    marginTop: 8,
+    marginTop: 12,
   },
   formCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 18,
+    padding: 22,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15,
@@ -283,13 +338,13 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   formTitle: {
-    fontSize: 17,
+    fontSize: 20,
     fontWeight: '700' as const,
     color: Colors.light.text,
     marginBottom: 1,
   },
   formSubtitle: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.light.textSecondary,
     marginBottom: 10,
   },
@@ -297,25 +352,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.light.inputBackground,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: Colors.light.border,
-    paddingHorizontal: 12,
-    marginBottom: 8,
+    paddingHorizontal: 14,
+    marginBottom: 10,
   },
   inputIcon: {
     marginRight: 10,
   },
   input: {
     flex: 1,
-    paddingVertical: 9,
-    fontSize: 14,
+    paddingVertical: 13,
+    fontSize: 16,
     color: Colors.light.text,
   },
   button: {
     backgroundColor: Colors.light.primary,
-    borderRadius: 10,
-    paddingVertical: 10,
+    borderRadius: 14,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -332,7 +387,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700' as const,
     marginRight: 8,
   },

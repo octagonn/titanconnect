@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { User as UserIcon, GraduationCap, Calendar, Heart, FileText, Check, Sparkles } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
+import { useResponsiveLayout } from '@/lib/responsive';
 
 const MAJORS = [
   'Computer Science',
@@ -54,6 +55,7 @@ export default function SetupProfileScreen() {
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [bio, setBio] = useState<string>('');
   const [fadeAnim] = useState(new Animated.Value(0));
+  const { isSmallHeight, insets } = useResponsiveLayout();
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -100,15 +102,20 @@ export default function SetupProfileScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            isSmallHeight && styles.scrollContentSmall,
+            { paddingBottom: (isSmallHeight ? 24 : 40) + insets.bottom },
+          ]}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
+          <Animated.View style={[styles.header, isSmallHeight && styles.headerCompact, { opacity: fadeAnim }]}>
             <View style={styles.headerIconContainer}>
               <Sparkles size={32} color={Colors.light.primary} strokeWidth={2.5} />
             </View>
-            <Text style={styles.title}>Complete Your Profile</Text>
-            <Text style={styles.subtitle}>Tell us a bit about yourself</Text>
+            <Text style={[styles.title, isSmallHeight && styles.titleSmall]}>Complete Your Profile</Text>
+            <Text style={[styles.subtitle, isSmallHeight && styles.subtitleSmall]}>Tell us a bit about yourself</Text>
             <View style={styles.progressContainer}>
               <View style={styles.progressBar}>
                 <View style={[styles.progressFill, { width: `${Math.round((1 + (major ? 1 : 0) + (year ? 1 : 0)) / 3 * 100)}%` }]} />
@@ -271,11 +278,16 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 24,
-    paddingVertical: 24,
-    paddingBottom: 40,
+    paddingTop: 24,
+  },
+  scrollContentSmall: {
+    paddingTop: 16,
   },
   header: {
     marginBottom: 32,
+  },
+  headerCompact: {
+    marginBottom: 24,
   },
   headerIconContainer: {
     width: 64,
@@ -292,11 +304,18 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     marginBottom: 8,
   },
+  titleSmall: {
+    fontSize: 26,
+  },
   subtitle: {
     fontSize: 17,
     color: Colors.light.textSecondary,
     marginBottom: 20,
     fontWeight: '500' as const,
+  },
+  subtitleSmall: {
+    fontSize: 15,
+    marginBottom: 16,
   },
   progressContainer: {
     gap: 8,

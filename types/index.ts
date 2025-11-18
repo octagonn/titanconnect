@@ -10,6 +10,7 @@ export interface User {
   createdAt?: string;
   isEmailVerified?: boolean;
   isProfileComplete?: boolean;
+  role?: 'student' | 'faculty';
 }
 
 export interface Post {

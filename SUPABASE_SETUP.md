@@ -9,16 +9,26 @@
    - **Project URL** (looks like: `https://xxxxx.supabase.co`)
    - **Project API anon/public key** (long string starting with `eyJ...`)
 
-## 2. Configure Environment Variables
+## 2. Configure Environment Variables (optional override)
 
-1. Create a `.env.local` file in the root of your project (copy from `.env.local.template`):
+The TitanConnect Supabase project URL and anon key are already hardcoded in `lib/supabase.ts` for the
+main CSUF project, so you do **not** need to create `.env.local` just to get the app working.
+
+Use `.env.local` only if you want to point the app at a different Supabase project (for example, your
+own dev/staging project):
 
 ```bash
 EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 ```
 
-2. **Important**: The `.env.local` file is gitignored for security. Never commit it to version control.
+Notes:
+
+- The `.env.local` file is gitignored for safety. Never commit it to version control.
+- The client logs `Supabase client configured { supabaseUrl, anonKeyPresent }` at startup so you can
+  confirm which project it is using.
+- The default TitanConnect build only trusts env URLs that still point at the TitanConnect project; if
+  the env URL looks wrong, it falls back to the hardcoded project URL to avoid silent misconfiguration.
 
 ## 3. Set Up Database Schema
 
@@ -35,19 +45,16 @@ This will create:
 
 ## 4. Configure Email Authentication
 
-### For Development (Magic Link)
-1. Go to **Authentication** → **Providers** → **Email**
-2. Enable **Email provider**
-3. Disable **Confirm email** for testing (you can enable it later for production)
-
-### For Production with CSUF Email Domain
-1. Go to **Authentication** → **URL Configuration**
-2. Set your site URL
-3. Go to **Email Templates** and customize the magic link email
-4. Optional: Set up SMTP with CSUF mail server for branded emails
+### Enable Email + Password Auth (with email confirmation)
+1. In your Supabase dashboard, go to **Authentication → Providers → Email**.
+2. Enable the **Email** provider.
+3. Under **Email auth**, enable **Email + Password**.
+4. Turn **Confirm email** **ON** so users **must verify their email before they can sign in**.
+5. (Optional but recommended) Configure your **SITE_URL / Redirect URL** under **Authentication → URL Configuration** so verification emails link back to your app.
+6. Update your **Email Templates** to match TitanConnect branding.
 
 ### Email Domain Restriction
-To restrict signups to `@csu.fullerton.edu` only:
+To restrict signups to CSUF emails only, while allowing both students and faculty:
 
 1. Go to **SQL Editor** and run:
 
@@ -56,8 +63,9 @@ To restrict signups to `@csu.fullerton.edu` only:
 create or replace function public.validate_email_domain()
 returns trigger as $$
 begin
-  if new.email not like '%@csu.fullerton.edu' then
-    raise exception 'Only @csu.fullerton.edu email addresses are allowed';
+  if new.email not like '%@csu.fullerton.edu'
+     and new.email not like '%@fullerton.edu' then
+    raise exception 'Only @csu.fullerton.edu or @fullerton.edu email addresses are allowed';
   end if;
   return new;
 end;
