@@ -1,0 +1,39 @@
+# ===========================================================
+# bugfile.yml
+# 
+# SCHEMA (YAML Format):
+#
+# bugs:
+#   - title: "Short, clear bug title"
+#     developer: "Full Name"
+#     date: "YYYY-MM-DD"
+#     description: "Brief explanation of the bug"
+#     steps_to_reproduce:
+#       - "Step 1"
+#       - "Step 2"
+#       - "Step 3"
+#
+# Notes:
+# - Newest bugs should be added at the TOP of the list
+# - All dates should be in ISO format (YYYY-MM-DD)
+# - Keep steps clear and reproducible
+# ===========================================================
+
+bugs:
+  - title: "Supabase auth signup email delay"
+    developer: "Enrico Zamarripa"
+    date: "2025-11-18"
+    description: "The app takes too long to send the Supabase confirmation email after signing up."
+    steps_to_reproduce:
+      - Open the app in Expo Go
+      - Attempt to sign up with a new CSUF email
+      - Observe the delay before receiving the confirmation email
+  - title: "Resending a confirmation/auth email does not work"
+    developer: "Enrico Zamarripa"
+    date: "2025-11-18"
+    description: "When a user tries to resend the confirmation/auth email, it fails to send."
+    steps_to_reproduce:
+      - Open the app in Expo Go
+      - Sign up with a new CSUF email
+      - Attempt to resend the confirmation email
+      - Observe that the email is not sent
