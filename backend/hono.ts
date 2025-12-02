@@ -8,8 +8,9 @@ const app = new Hono();
 
 app.use("*", cors());
 
+// Handle TRPC requests under /api/trpc
 app.use(
-  "/trpc/*",
+  "/api/trpc/*",
   trpcServer({
     endpoint: "/api/trpc",
     router: appRouter,
@@ -17,7 +18,7 @@ app.use(
   })
 );
 
-app.get("/", (c) => {
+app.get("/api", (c) => {
   return c.json({ status: "ok", message: "API is running" });
 });
 

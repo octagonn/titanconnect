@@ -1,4 +1,4 @@
-import { Heart, MessageCircle, Plus } from 'lucide-react-native';
+import { Heart, MessageCircle, Plus, Image as ImageIcon, X } from 'lucide-react-native';
 import { useState, useCallback } from 'react';
 import {
   View,
@@ -11,41 +11,143 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import Colors from '@/constants/colors';
-import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Post } from '@/types';
+import { trpc } from '@/lib/trpc';
+import { uploadImage } from '@/lib/storage';
+
+// Helper to show alerts safely on web
+const showAlert = (title: string, message: string) => {
+  if (Platform.OS === 'web') {
+    window.alert(`${title}: ${message}`);
+  } else {
+    Alert.alert(title, message);
+  }
+};
 
 type FilterType = 'all' | 'clubs' | 'events' | 'study';
 
 export default function HomeScreen() {
-  const { posts, addPost, toggleLike, addComment } = useApp();
   const { currentUser } = useAuth();
   const [filter, setFilter] = useState<FilterType>('all');
   const [showCreatePost, setShowCreatePost] = useState<boolean>(false);
   const [newPostContent, setNewPostContent] = useState<string>('');
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showComments, setShowComments] = useState<string | null>(null);
   const [commentText, setCommentText] = useState<string>('');
+  const [isPosting, setIsPosting] = useState(false);
 
-  const filteredPosts = posts.filter((post) => filter === 'all' || post.category === filter);
+  const utils = trpc.useUtils();
 
-  const handleCreatePost = useCallback(() => {
-    if (newPostContent.trim()) {
-      addPost(newPostContent.trim(), filter === 'all' ? 'all' : filter);
-      setNewPostContent('');
-      setShowCreatePost(false);
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isLoading,
+    isFetchingNextPage,
+    refetch,
+    isRefetching,
+  } = trpc.posts.getInfinite.useInfiniteQuery(
+    {
+      limit: 10,
+      category: filter === 'all' ? undefined : filter,
+    },
+    {
+      getNextPageParam: (lastPage) => lastPage.nextCursor,
     }
-  }, [newPostContent, filter, addPost]);
+  );
+
+  const posts = data?.pages.flatMap((page) => page.items) ?? [];
+
+  const createPostMutation = trpc.posts.create.useMutation({
+    onSuccess: () => {
+      utils.posts.getInfinite.invalidate();
+      setNewPostContent('');
+      setSelectedImage(null);
+      setShowCreatePost(false);
+      setIsPosting(false);
+    },
+    onError: (error) => {
+      console.error('Create Post Error:', error);
+      showAlert('Error', error.message || 'Failed to create post');
+      setIsPosting(false);
+    },
+  });
+
+  const toggleLikeMutation = trpc.posts.toggleLike.useMutation({
+    onSuccess: () => {
+      utils.posts.getInfinite.invalidate();
+    },
+  });
+
+  const addCommentMutation = trpc.posts.addComment.useMutation({
+    onSuccess: () => {
+      utils.posts.getInfinite.invalidate();
+      setCommentText('');
+    },
+  });
+
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setSelectedImage(result.assets[0].uri);
+    }
+  };
+
+  const handleCreatePost = async () => {
+    if (!newPostContent.trim() && !selectedImage) return;
+
+    console.log('Creating post...', { content: newPostContent, hasImage: !!selectedImage });
+    setIsPosting(true);
+    try {
+      let imageUrl = undefined;
+      if (selectedImage) {
+        console.log('Uploading image...');
+        const uploadedUrl = await uploadImage('posts', selectedImage);
+        if (uploadedUrl) {
+          imageUrl = uploadedUrl;
+          console.log('Image uploaded:', imageUrl);
+        } else {
+          showAlert('Error', 'Failed to upload image');
+          setIsPosting(false);
+          return;
+        }
+      }
+
+      console.log('Mutating createPost...');
+      await createPostMutation.mutateAsync({
+        content: newPostContent.trim(),
+        category: filter === 'all' ? 'all' : filter,
+        imageUrl,
+      });
+    } catch (error) {
+      // Error handled in mutation onError
+      console.error('HandleCreatePost catch:', error);
+    }
+  };
+
+  const handleToggleLike = (postId: string) => {
+    toggleLikeMutation.mutate({ postId });
+  };
 
   const handleAddComment = useCallback(
     (postId: string) => {
       if (commentText.trim()) {
-        addComment(postId, commentText.trim());
-        setCommentText('');
+        addCommentMutation.mutate({ postId, content: commentText.trim() });
       }
     },
-    [commentText, addComment]
+    [commentText, addCommentMutation]
   );
 
   const renderPost = useCallback(
@@ -71,11 +173,15 @@ export default function HomeScreen() {
           </View>
 
           <Text style={styles.postContent}>{item.content}</Text>
+          
+          {item.imageUrl && (
+            <Image source={{ uri: item.imageUrl }} style={styles.postImage} resizeMode="contain" />
+          )}
 
           <View style={styles.postActions}>
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => toggleLike(item.id)}
+              onPress={() => handleToggleLike(item.id)}
               testID={`like-button-${item.id}`}
             >
               <Heart
@@ -124,13 +230,13 @@ export default function HomeScreen() {
                 />
                 <TouchableOpacity
                   onPress={onAddComment}
-                  disabled={!commentText.trim()}
+                  disabled={!commentText.trim() || addCommentMutation.isPending}
                   testID={`submit-comment-${item.id}`}
                 >
                   <Text
                     style={[
                       styles.commentSubmit,
-                      !commentText.trim() && styles.commentSubmitDisabled,
+                      (!commentText.trim() || addCommentMutation.isPending) && styles.commentSubmitDisabled,
                     ]}
                   >
                     Post
@@ -142,7 +248,7 @@ export default function HomeScreen() {
         </View>
       );
     },
-    [currentUser, showComments, commentText, toggleLike, handleAddComment]
+    [currentUser, showComments, commentText, handleToggleLike, handleAddComment, addCommentMutation.isPending]
   );
 
   return (
@@ -162,13 +268,31 @@ export default function HomeScreen() {
         ))}
       </View>
 
-      <FlatList
-        data={filteredPosts}
-        renderItem={renderPost}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-      />
+      {isLoading ? (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={Colors.light.primary} />
+        </View>
+      ) : (
+        <FlatList
+          data={posts}
+          renderItem={renderPost}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          onEndReached={() => hasNextPage && fetchNextPage()}
+          onEndReachedThreshold={0.5}
+          refreshing={isRefetching}
+          onRefresh={refetch}
+          ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={Colors.light.primary} /> : null}
+          ListEmptyComponent={
+             !isLoading && (
+              <View style={styles.centerContainer}>
+                <Text style={styles.emptyText}>No posts found</Text>
+              </View>
+            )
+          }
+        />
+      )}
 
       <TouchableOpacity
         style={styles.fab}
@@ -207,14 +331,39 @@ export default function HomeScreen() {
               testID="post-content-input"
             />
 
-            <TouchableOpacity
-              style={[styles.postButton, !newPostContent.trim() && styles.postButtonDisabled]}
-              onPress={handleCreatePost}
-              disabled={!newPostContent.trim()}
-              testID="submit-post-button"
-            >
-              <Text style={styles.postButtonText}>Post</Text>
-            </TouchableOpacity>
+            {selectedImage && (
+              <View style={styles.selectedImageContainer}>
+                <Image source={{ uri: selectedImage }} style={styles.selectedImage} />
+                <TouchableOpacity 
+                  style={styles.removeImageButton}
+                  onPress={() => setSelectedImage(null)}
+                >
+                  <X size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
+                <ImageIcon size={24} color={Colors.light.primary} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.postButton,
+                  (!newPostContent.trim() && !selectedImage) && styles.postButtonDisabled,
+                ]}
+                onPress={handleCreatePost}
+                disabled={isPosting || (!newPostContent.trim() && !selectedImage)}
+                testID="submit-post-button"
+              >
+                {isPosting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.postButtonText}>Post</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -240,6 +389,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.light.feedBackground,
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: Colors.light.textSecondary,
   },
   filterContainer: {
     flexDirection: 'row',
@@ -310,6 +469,13 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     lineHeight: 22,
     marginBottom: 12,
+  },
+  postImage: {
+    width: '100%',
+    height: 250,
+    borderRadius: 8,
+    marginBottom: 12,
+    backgroundColor: Colors.light.backgroundSecondary,
   },
   postActions: {
     flexDirection: 'row',
@@ -439,11 +605,23 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     marginBottom: 16,
   },
+  modalActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  imageButton: {
+    padding: 10,
+    backgroundColor: Colors.light.backgroundSecondary,
+    borderRadius: 8,
+  },
   postButton: {
     backgroundColor: Colors.light.primary,
     borderRadius: 12,
     paddingVertical: 14,
+    paddingHorizontal: 32,
     alignItems: 'center',
+    minWidth: 100,
   },
   postButtonDisabled: {
     backgroundColor: Colors.light.border,
@@ -452,5 +630,24 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600' as const,
+  },
+  selectedImageContainer: {
+    position: 'relative',
+    marginBottom: 16,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  selectedImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 12,
+    padding: 4,
   },
 });

@@ -2,6 +2,8 @@ import { createTRPCReact } from "@trpc/react-query";
 import { httpLink } from "@trpc/client";
 import type { AppRouter } from "@/backend/trpc/app-router";
 import superjson from "superjson";
+import Constants from "expo-constants";
+import { supabase } from "./supabase";
 
 export const trpc = createTRPCReact<AppRouter>();
 
@@ -11,16 +13,18 @@ const getBaseUrl = () => {
     return process.env.EXPO_PUBLIC_API_URL;
   }
 
-  // Fallback to localhost for development
-  if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
-    return "http://localhost:3000";
+  // On Web, use relative URL (empty string) so it hits the same origin
+  if (typeof window !== 'undefined') {
+    return '';
   }
 
-  // If no URL is set, return empty string (tRPC will be disabled)
-  console.warn(
-    "EXPO_PUBLIC_API_URL is not set. tRPC client will not be available."
-  );
-  return "";
+  // On Native, use the Expo host IP
+  if (Constants.expoConfig?.hostUri) {
+    return `http://${Constants.expoConfig.hostUri}`;
+  }
+
+  // Fallback to localhost (default Expo port)
+  return "http://localhost:8081";
 };
 
 const baseUrl = getBaseUrl();
@@ -28,8 +32,15 @@ const baseUrl = getBaseUrl();
 export const trpcClient = trpc.createClient({
   links: [
     httpLink({
-      url: baseUrl ? `${baseUrl}/api/trpc` : "http://localhost:3000/api/trpc",
+      url: `${baseUrl}/api/trpc`,
       transformer: superjson,
+      async headers() {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        return {
+          Authorization: token ? `Bearer ${token}` : undefined,
+        };
+      },
     }),
   ],
 });
