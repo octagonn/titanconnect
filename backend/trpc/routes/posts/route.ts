@@ -95,6 +95,83 @@ export const postsRouter = createTRPCRouter({
       };
     }),
 
+  getById: publicProcedure
+    .input(
+      z.object({
+        id: z.string(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { id } = input;
+
+      const { data, error } = await ctx.supabase
+        .from('posts')
+        .select(`
+          *,
+          profiles (
+            name,
+            avatar_url
+          ),
+          likes (
+            user_id
+          ),
+          comments (
+            id,
+            user_id,
+            content,
+            created_at,
+            profiles (
+              name,
+              avatar_url
+            )
+          )
+        `)
+        .eq('id', id)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching post by id:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message,
+        });
+      }
+
+      if (!data) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Post not found',
+        });
+      }
+
+      const post = {
+        id: data.id,
+        userId: data.user_id,
+        userName: data.profiles?.name || 'Unknown',
+        userAvatar: data.profiles?.avatar_url,
+        content: data.content,
+        imageUrl: data.image_url,
+        likes: data.likes ? data.likes.length : 0,
+        likedBy: data.likes ? data.likes.map((l: any) => l.user_id) : [],
+        comments: data.comments
+          ? data.comments
+              .map((c: any) => ({
+                id: c.id,
+                userId: c.user_id,
+                userName: c.profiles?.name || 'Unknown',
+                userAvatar: c.profiles?.avatar_url,
+                content: c.content,
+                createdAt: c.created_at,
+              }))
+              .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+          : [],
+        createdAt: data.created_at,
+        category: data.category,
+      };
+
+      return post;
+    }),
+
   create: protectedProcedure
     .input(
       z.object({

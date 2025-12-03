@@ -10,15 +10,9 @@ const FALLBACK_SUPABASE_ANON_KEY =
 
 export const createContext = async (opts: FetchCreateContextFnOptions) => {
   const authHeader = opts.req.headers.get("authorization");
+  console.log("TRPC Context - Auth Header:", authHeader ? "Present" : "Missing");
 
-  // Extract raw JWT token from "Bearer <token>" header if present
-  const token =
-    authHeader?.startsWith("Bearer ")
-      ? authHeader.slice("Bearer ".length)
-      : authHeader?.startsWith("bearer ")
-      ? authHeader.slice("bearer ".length)
-      : null;
-
+  // Read env vars if present; only trust URL if it still points at the TitanConnect project.
   const envSupabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
   const envSupabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -35,25 +29,24 @@ export const createContext = async (opts: FetchCreateContextFnOptions) => {
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     global: {
-      headers: token
-        ? {
-            Authorization: `Bearer ${token}`,
-          }
-        : {},
-    },
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
+      headers: {
+        Authorization: authHeader || "",
+      },
     },
   });
 
+  // If there is an auth header, try to get the user
   let user: User | null = null;
-  if (token) {
-    const { data, error } = await supabase.auth.getUser(token);
+  if (authHeader) {
+    const { data, error } = await supabase.auth.getUser();
     if (error) {
       console.error("Supabase getUser error:", error.message);
+    } else if (data?.user) {
+      console.log("Supabase User authenticated:", data.user.id);
+      user = data.user;
     }
-    user = data.user;
+  } else {
+    console.log("No auth header provided to TRPC");
   }
 
   return {
@@ -75,7 +68,9 @@ export const publicProcedure = t.procedure;
 export const protectedProcedure = t.procedure.use(async function isAuthed(opts) {
   const { ctx } = opts;
 
+  // If no user, return UNAUTHORIZED error but ensure it's a proper TRPC error response
   if (!ctx.user) {
+    console.warn("Protected procedure called without user");
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
 

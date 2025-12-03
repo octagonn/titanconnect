@@ -15,6 +15,7 @@ import {
   Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { Post } from '@/types';
@@ -30,11 +31,9 @@ const showAlert = (title: string, message: string) => {
   }
 };
 
-type FilterType = 'all' | 'clubs' | 'events' | 'study';
-
 export default function HomeScreen() {
   const { currentUser } = useAuth();
-  const [filter, setFilter] = useState<FilterType>('all');
+  const router = useRouter();
   const [showCreatePost, setShowCreatePost] = useState<boolean>(false);
   const [newPostContent, setNewPostContent] = useState<string>('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -55,7 +54,6 @@ export default function HomeScreen() {
   } = trpc.posts.getInfinite.useInfiniteQuery(
     {
       limit: 10,
-      category: filter === 'all' ? undefined : filter,
     },
     {
       getNextPageParam: (lastPage) => lastPage.nextCursor,
@@ -128,7 +126,7 @@ export default function HomeScreen() {
       console.log('Mutating createPost...');
       await createPostMutation.mutateAsync({
         content: newPostContent.trim(),
-        category: filter === 'all' ? 'all' : filter,
+        category: 'all',
         imageUrl,
       });
     } catch (error) {
@@ -161,22 +159,27 @@ export default function HomeScreen() {
 
       return (
         <View style={styles.postCard}>
-          <View style={styles.postHeader}>
-            <Image
-              source={{ uri: item.userAvatar || 'https://i.pravatar.cc/150?img=0' }}
-              style={styles.avatar}
-            />
-            <View style={styles.postHeaderText}>
-              <Text style={styles.userName}>{item.userName}</Text>
-              <Text style={styles.timeAgo}>{getTimeAgo(item.createdAt)}</Text>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => router.push({ pathname: '/post/[id]', params: { id: item.id } })}
+          >
+            <View style={styles.postHeader}>
+              <Image
+                source={{ uri: item.userAvatar || 'https://i.pravatar.cc/150?img=0' }}
+                style={styles.avatar}
+              />
+              <View style={styles.postHeaderText}>
+                <Text style={styles.userName}>{item.userName}</Text>
+                <Text style={styles.timeAgo}>{getTimeAgo(item.createdAt)}</Text>
+              </View>
             </View>
-          </View>
 
-          <Text style={styles.postContent}>{item.content}</Text>
-          
-          {item.imageUrl && (
-            <Image source={{ uri: item.imageUrl }} style={styles.postImage} resizeMode="contain" />
-          )}
+            <Text style={styles.postContent}>{item.content}</Text>
+            
+            {item.imageUrl && (
+              <Image source={{ uri: item.imageUrl }} style={styles.postImage} resizeMode="contain" />
+            )}
+          </TouchableOpacity>
 
           <View style={styles.postActions}>
             <TouchableOpacity
@@ -248,26 +251,11 @@ export default function HomeScreen() {
         </View>
       );
     },
-    [currentUser, showComments, commentText, handleToggleLike, handleAddComment, addCommentMutation.isPending]
+    [currentUser, showComments, commentText, handleToggleLike, handleAddComment, addCommentMutation.isPending, router]
   );
 
   return (
     <View style={styles.container}>
-      <View style={styles.filterContainer}>
-        {(['all', 'clubs', 'events', 'study'] as FilterType[]).map((f) => (
-          <TouchableOpacity
-            key={f}
-            style={[styles.filterButton, filter === f && styles.filterButtonActive]}
-            onPress={() => setFilter(f)}
-            testID={`filter-${f}`}
-          >
-            <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
-              {f.charAt(0).toUpperCase() + f.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
       {isLoading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={Colors.light.primary} />
@@ -399,32 +387,6 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: Colors.light.textSecondary,
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: Colors.light.background,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.light.border,
-    gap: 8,
-  },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.light.backgroundSecondary,
-  },
-  filterButtonActive: {
-    backgroundColor: Colors.light.primary,
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: '500' as const,
-    color: Colors.light.text,
-  },
-  filterTextActive: {
-    color: '#ffffff',
   },
   listContent: {
     padding: 16,
