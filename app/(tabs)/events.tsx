@@ -1,9 +1,10 @@
 import { Calendar, MapPin, Users, Check } from 'lucide-react-native';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, TextInput } from 'react-native';
 import Colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Event } from '@/types';
+import { useState } from 'react';
 
 export default function EventsScreen() {
   const { events, toggleEventRSVP } = useApp();
@@ -13,6 +14,25 @@ export default function EventsScreen() {
     const isAttending = currentUser ? item.attendees.includes(currentUser.id) : false;
     const isInterested = currentUser ? item.interestedUsers.includes(currentUser.id) : false;
     const totalAttendees = item.attendees.length + item.interestedUsers.length;
+
+    // Local state for comment input
+    const [commentText, setCommentText] = useState("");
+
+    async function postComment() {
+      if (!commentText.trim()) return;
+
+      await fetch("/api/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          postId: item.id,
+          commentText,
+          userId: currentUser?.id,
+        }),
+      });
+
+      setCommentText("");
+    }
 
     return (
       <View style={styles.eventCard}>
@@ -74,6 +94,28 @@ export default function EventsScreen() {
                 Interested
               </Text>
             </TouchableOpacity>
+          </View>
+
+          {/* --- Comments Section --- */}
+          <View style={styles.commentsSection}>
+            <Text style={styles.commentsHeader}>Comments</Text>
+            {item.comments?.map((comment) => (
+              <Text key={comment.id} style={styles.commentText}>
+                • {comment.text}
+              </Text>
+            ))}
+
+            <View style={styles.commentInputRow}>
+              <TextInput
+                value={commentText}
+                onChangeText={setCommentText}
+                placeholder="Write a comment..."
+                style={styles.commentInput}
+              />
+              <TouchableOpacity onPress={postComment} style={styles.commentButton}>
+                <Text style={styles.commentButtonText}>Post</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </View>
@@ -226,4 +268,27 @@ const styles = StyleSheet.create({
   rsvpButtonTextInterested: {
     color: '#ffffff',
   },
-});
+  // --- New styles for comments ---
+  commentsSection: {
+    marginTop: 16,
+  },
+  commentsHeader: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    marginBottom: 8,
+    color: Colors.light.text,
+  },
+  commentText: {
+    fontSize: 14,
+    color: Colors.light.textSecondary,
+    marginBottom: 4,
+  },
+  commentInputRow: {
+    flexDirection: 'row',
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  commentInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor:
