@@ -12,6 +12,14 @@ export const createContext = async (opts: FetchCreateContextFnOptions) => {
   const authHeader = opts.req.headers.get("authorization");
   console.log("TRPC Context - Auth Header:", authHeader ? "Present" : "Missing");
 
+  // Extract raw JWT token from "Bearer <token>" header if present
+  const token =
+    authHeader?.startsWith("Bearer ")
+      ? authHeader.slice("Bearer ".length)
+      : authHeader?.startsWith("bearer ")
+      ? authHeader.slice("bearer ".length)
+      : null;
+
   // Read env vars if present; only trust URL if it still points at the TitanConnect project.
   const envSupabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
   const envSupabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -29,16 +37,22 @@ export const createContext = async (opts: FetchCreateContextFnOptions) => {
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     global: {
-      headers: {
-        Authorization: authHeader || "",
-      },
+      headers: token
+        ? {
+            Authorization: `Bearer ${token}`,
+          }
+        : {},
+    },
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
     },
   });
 
   // If there is an auth header, try to get the user
   let user: User | null = null;
-  if (authHeader) {
-    const { data, error } = await supabase.auth.getUser();
+  if (token) {
+    const { data, error } = await supabase.auth.getUser(token);
     if (error) {
       console.error("Supabase getUser error:", error.message);
     } else if (data?.user) {
@@ -46,7 +60,7 @@ export const createContext = async (opts: FetchCreateContextFnOptions) => {
       user = data.user;
     }
   } else {
-    console.log("No auth header provided to TRPC");
+    console.log("No valid bearer token provided to TRPC");
   }
 
   return {
