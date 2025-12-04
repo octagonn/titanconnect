@@ -128,7 +128,7 @@ export default function ProfileScreen() {
 
         <View style={styles.joinedSection}>
           <Text style={styles.joinedText}>
-            Joined {formatJoinDate(currentUser.createdAt)}
+            Joined {currentUser.createdAt ? formatJoinDate(currentUser.createdAt) : 'Unknown'}
           </Text>
         </View>
       </ScrollView>

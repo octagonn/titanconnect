@@ -48,6 +48,7 @@ export interface Event {
   imageUrl?: string;
   attendees: string[];
   interestedUsers: string[];
+  comments?: Comment[];
   createdAt: string;
 }
 
