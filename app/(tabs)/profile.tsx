@@ -1,11 +1,17 @@
+// app/(tabs)/profile.tsx
 import { useRouter, useNavigation } from 'expo-router';
-import { LogOut, Mail, GraduationCap, Award, Heart } from 'lucide-react-native';
+import { LogOut, Mail, GraduationCap, Award, Heart, Pencil } from 'lucide-react-native';
 import { useLayoutEffect, useCallback, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Alert, TextInput, Button } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Alert, TextInput, Button, ActionSheetIOS, Platform } from 'react-native';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabase';
+import * as ImagePicker from 'expo-image-picker';
+import { v4 as uuidv4 } from 'uuid';
+
+import styles from '../../styles/profile.styles';
+
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -79,6 +85,86 @@ export default function ProfileScreen() {
     }
   };
 
+  const uploadProfilePicture = async (uri: string, userId: string) => {
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+
+      const fileName = `${userId}-${uuidv4()}`;
+      const { error } = await supabase.storage.from('avatars').upload(fileName, blob, {
+        contentType: blob.type,
+      });
+
+      if (error) {
+        Alert.alert('Error', 'Failed to upload profile picture. Please try again.');
+        return null;
+      }
+
+      const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
+      return data.publicUrl;
+    } catch (err) {
+      Alert.alert('Error', 'An unexpected error occurred while uploading the profile picture.');
+      return null;
+    }
+  };
+
+  const handleProfilePicAction = async () => {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Take Photo', 'Upload Photo'],
+          cancelButtonIndex: 0,
+        },
+        async (buttonIndex) => {
+          let result;
+          if (buttonIndex === 1) {
+            // Take Photo
+            const permission = await ImagePicker.requestCameraPermissionsAsync();
+            if (permission.granted) {
+              result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 1,
+              });
+            }
+          } else if (buttonIndex === 2) {
+            // Upload Photo
+            const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (permission.granted) {
+              result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 1,
+              });
+            }
+          }
+
+          if (result && !result.canceled && currentUser) {
+            const publicUrl = await uploadProfilePicture(result.assets[0].uri, currentUser.id);
+            if (publicUrl) {
+              // Update the user's profile with the new avatar URL
+              const { error } = await supabase
+                .from('profiles')
+                .update({ avatar: publicUrl })
+                .eq('id', currentUser.id);
+
+              if (error) {
+                Alert.alert('Error', 'Failed to update profile picture. Please try again.');
+              } else {
+                Alert.alert('Success', 'Profile picture updated successfully!');
+                currentUser.avatar = publicUrl; // Update the local user object
+              }
+            }
+          }
+        }
+      );
+    } else {
+      Alert.alert('Unsupported Platform', 'This feature is only available on iOS.');
+    }
+  };
+
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
@@ -104,10 +190,15 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Image
-            source={{ uri: currentUser.avatar || 'https://i.pravatar.cc/150?img=0' }}
-            style={styles.avatar}
-          />
+          <View style={styles.avatarContainer}>
+            <Image
+              source={{ uri: currentUser.avatar || 'https://i.pravatar.cc/150?img=0' }}
+              style={styles.avatar}
+            />
+            <TouchableOpacity style={styles.editIconButton} onPress={handleProfilePicAction}>
+              <Pencil size={20} color="#ffffff" /> {/* Updated to use the Pencil icon */}
+            </TouchableOpacity>
+          </View>
           <Text style={styles.name}>{currentUser.name}</Text>
           <View style={styles.majorAndYearContainer}>
             <Text style={styles.major}>{currentUser.major}</Text>
@@ -246,238 +337,3 @@ function formatJoinDate(dateString: string): string {
   return date.toLocaleDateString('en-US', options);
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.background,
-  },
-  logoutButton: {
-    paddingHorizontal: 16,
-  },
-  scrollContent: {
-    paddingBottom: 24,
-  },
-  header: {
-    alignItems: 'center',
-    paddingTop: 32,
-    paddingBottom: 24,
-    backgroundColor: Colors.light.qrBackground,
-  },
-  avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    marginBottom: 16,
-    borderWidth: 4,
-    borderColor: '#ffffff',
-  },
-  name: {
-    fontSize: 28,
-    fontWeight: '700' as const,
-    color: Colors.light.text,
-    marginBottom: 4,
-  },
-  majorAndYearContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  major: {
-    fontSize: 16,
-    color: Colors.light.textSecondary,
-  },
-  yearBadge: {
-    backgroundColor: Colors.light.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  yearText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600' as const,
-  },
-  bioSection: {
-    alignItems: 'center',
-    marginTop: 16, // Ensure consistent spacing
-    marginBottom: 8, // Added to balance spacing
-  },
-  bioText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.light.text,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  addBioSection: {
-    padding: 16,
-    backgroundColor: Colors.light.card,
-    borderRadius: 8,
-    marginVertical: 8, // Reduced to maintain consistent spacing
-  },
-  bioInput: {
-    borderWidth: 1,
-    borderColor: Colors.light.border,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 15,
-    color: Colors.light.text,
-    marginBottom: 12,
-  },
-  charCount: {
-    fontSize: 12,
-    color: Colors.light.textSecondary,
-    textAlign: 'right',
-    marginBottom: 8,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    gap: 12,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: Colors.light.card,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  statNumber: {
-    fontSize: 28,
-    fontWeight: '700' as const,
-    color: Colors.light.primary,
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 13,
-    color: Colors.light.textSecondary,
-    fontWeight: '500' as const,
-  },
-  section: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700' as const,
-    color: Colors.light.text,
-  },
-  interestsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  interestChip: {
-    backgroundColor: Colors.light.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  interestText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '500' as const,
-  },
-  infoCard: {
-    backgroundColor: Colors.light.card,
-    borderRadius: 12,
-    padding: 16,
-    gap: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  infoIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.light.qrBackground,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  infoContent: {
-    flex: 1,
-  },
-  infoLabel: {
-    fontSize: 12,
-    color: Colors.light.textSecondary,
-    marginBottom: 2,
-  },
-  infoValue: {
-    fontSize: 15,
-    color: Colors.light.text,
-    fontWeight: '500' as const,
-  },
-  joinedSection: {
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  joinedText: {
-    fontSize: 13,
-    color: Colors.light.textSecondary,
-  },
-  editBioBadge: {
-    backgroundColor: Colors.light.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-    marginTop: 4,
-    alignSelf: 'center',
-  },
-  editBioText: {
-    fontSize: 12,
-    color: '#ffffff',
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  saveBioBadge: {
-    backgroundColor: Colors.light.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-    marginTop: 4,
-    alignSelf: 'center',
-  },
-  saveBioText: {
-    fontSize: 12,
-    color: '#ffffff',
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  addBioBadge: {
-    backgroundColor: Colors.light.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-    marginTop: 4,
-    alignSelf: 'center',
-  },
-  addBioText: {
-    fontSize: 12,
-    color: '#ffffff',
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-});
