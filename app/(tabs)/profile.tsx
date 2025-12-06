@@ -1,16 +1,21 @@
 import { useRouter, useNavigation } from 'expo-router';
 import { LogOut, Mail, GraduationCap, Award, Heart } from 'lucide-react-native';
-import { useLayoutEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Alert } from 'react-native';
+import { useLayoutEffect, useCallback, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Alert, TextInput, Button } from 'react-native';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
+import { supabase } from '@/lib/supabase';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const { currentUser, signOut } = useAuth();
   const { posts, connections } = useApp();
+
+  const [isAddingBio, setIsAddingBio] = useState(false);
+  const [isEditingBio, setIsEditingBio] = useState(false);
+  const [newBio, setNewBio] = useState('');
 
   const handleSignOut = useCallback(() => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -25,6 +30,54 @@ export default function ProfileScreen() {
       },
     ]);
   }, [signOut, router]);
+
+  const handleAddBio = async () => {
+    if (!currentUser) return;
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ bio: newBio })
+        .eq('id', currentUser.id);
+
+      if (error) {
+        Alert.alert('Error', 'Failed to add bio. Please try again.');
+      } else {
+        Alert.alert('Success', 'Bio added successfully!');
+        currentUser.bio = newBio; // Update the local user object
+        setIsAddingBio(false);
+      }
+    } catch (err) {
+      Alert.alert('Error', 'An unexpected error occurred.');
+    }
+  };
+
+  const handleEditBio = async () => {
+    if (!currentUser) return;
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ bio: newBio })
+        .eq('id', currentUser.id);
+
+      if (error) {
+        Alert.alert('Error', 'Failed to update bio. Please try again.');
+      } else {
+        Alert.alert('Success', 'Bio updated successfully!');
+        currentUser.bio = newBio; // Update the local user object
+        setIsEditingBio(false);
+      }
+    } catch (err) {
+      Alert.alert('Error', 'An unexpected error occurred.');
+    }
+  };
+
+  const handleBioChange = (text: string) => {
+    if (text.length <= 150) {
+      setNewBio(text);
+    }
+  };
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -56,17 +109,68 @@ export default function ProfileScreen() {
             style={styles.avatar}
           />
           <Text style={styles.name}>{currentUser.name}</Text>
-          <Text style={styles.major}>{currentUser.major}</Text>
-          <View style={styles.yearBadge}>
-            <Text style={styles.yearText}>{currentUser.year}</Text>
+          <View style={styles.majorAndYearContainer}>
+            <Text style={styles.major}>{currentUser.major}</Text>
+            <View style={styles.yearBadge}>
+              <Text style={styles.yearText}>{currentUser.year}</Text>
+            </View>
           </View>
-        </View>
 
-        {currentUser.bio && (
-          <View style={styles.bioSection}>
-            <Text style={styles.bio}>{currentUser.bio}</Text>
-          </View>
-        )}
+          {!currentUser.bio && !isAddingBio && (
+            <View style={styles.addBioBadge}>
+              <Text style={styles.addBioText} onPress={() => setIsAddingBio(true)}>
+                Add Bio
+              </Text>
+            </View>
+          )}
+
+          {isAddingBio && (
+            <View style={[styles.addBioSection, { backgroundColor: 'transparent', borderWidth: 0 }]}>
+              <TextInput
+                style={styles.bioInput}
+                placeholder="Write your bio here..."
+                value={newBio}
+                onChangeText={handleBioChange}
+                multiline
+              />
+              <Text style={styles.charCount}>{150 - newBio.length} characters left</Text>
+              <View style={styles.saveBioBadge}>
+                <Text style={styles.saveBioText} onPress={handleAddBio}>
+                  Save Bio
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {currentUser.bio && !isEditingBio && (
+            <View style={styles.bioSection}>
+              <Text style={styles.bioText}>"{currentUser.bio}"</Text>
+              <View style={styles.editBioBadge}>
+                <Text style={styles.editBioText} onPress={() => setIsEditingBio(true)}>
+                  Edit Bio
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {isEditingBio && (
+            <View style={[styles.addBioSection, { backgroundColor: 'transparent', borderWidth: 0 }]}>
+              <TextInput
+                style={[styles.bioInput, { backgroundColor: 'transparent' }]}
+                placeholder="Edit your bio here..."
+                value={newBio}
+                onChangeText={handleBioChange}
+                multiline
+              />
+              <Text style={styles.charCount}>{150 - newBio.length} characters left</Text>
+              <View style={styles.saveBioBadge}>
+                <Text style={styles.saveBioText} onPress={handleEditBio}>
+                  Save Bio
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
 
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
@@ -173,10 +277,16 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     marginBottom: 4,
   },
+  majorAndYearContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
   major: {
     fontSize: 16,
     color: Colors.light.textSecondary,
-    marginBottom: 8,
   },
   yearBadge: {
     backgroundColor: Colors.light.primary,
@@ -190,17 +300,37 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
   },
   bioSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: Colors.light.card,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.light.border,
+    alignItems: 'center',
+    marginTop: 16, // Ensure consistent spacing
+    marginBottom: 8, // Added to balance spacing
   },
-  bio: {
+  bioText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.light.text,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  addBioSection: {
+    padding: 16,
+    backgroundColor: Colors.light.card,
+    borderRadius: 8,
+    marginVertical: 8, // Reduced to maintain consistent spacing
+  },
+  bioInput: {
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+    borderRadius: 8,
+    padding: 12,
     fontSize: 15,
     color: Colors.light.text,
-    lineHeight: 22,
-    textAlign: 'center',
+    marginBottom: 12,
+  },
+  charCount: {
+    fontSize: 12,
+    color: Colors.light.textSecondary,
+    textAlign: 'right',
+    marginBottom: 8,
   },
   statsContainer: {
     flexDirection: 'row',
@@ -307,5 +437,47 @@ const styles = StyleSheet.create({
   joinedText: {
     fontSize: 13,
     color: Colors.light.textSecondary,
+  },
+  editBioBadge: {
+    backgroundColor: Colors.light.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    marginTop: 4,
+    alignSelf: 'center',
+  },
+  editBioText: {
+    fontSize: 12,
+    color: '#ffffff',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  saveBioBadge: {
+    backgroundColor: Colors.light.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    marginTop: 4,
+    alignSelf: 'center',
+  },
+  saveBioText: {
+    fontSize: 12,
+    color: '#ffffff',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  addBioBadge: {
+    backgroundColor: Colors.light.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    marginTop: 4,
+    alignSelf: 'center',
+  },
+  addBioText: {
+    fontSize: 12,
+    color: '#ffffff',
+    textAlign: 'center',
+    fontWeight: '500',
   },
 });
