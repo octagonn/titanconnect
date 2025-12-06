@@ -1,6 +1,6 @@
 // app/(tabs)/profile.tsx
 import { useRouter, useNavigation } from 'expo-router';
-import { LogOut, Mail, GraduationCap, Award, Heart, Pencil } from 'lucide-react-native';
+import { LogOut, Mail, GraduationCap, Award, Heart, Pencil, University } from 'lucide-react-native';
 import { useLayoutEffect, useCallback, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Alert, TextInput, Button, ActionSheetIOS, Platform } from 'react-native';
 import Colors from '@/constants/colors';
@@ -195,7 +195,7 @@ export default function ProfileScreen() {
               source={{ uri: currentUser.avatar || 'https://i.pravatar.cc/150?img=0' }}
               style={styles.avatar}
             />
-            <TouchableOpacity style={styles.editIconButton} onPress={handleProfilePicAction}>
+            <TouchableOpacity style={styles.editProfileIconButton} onPress={handleProfilePicAction}>
               <Pencil size={20} color="#ffffff" /> {/* Updated to use the Pencil icon */}
             </TouchableOpacity>
           </View>
@@ -235,7 +235,7 @@ export default function ProfileScreen() {
 
           {currentUser.bio && !isEditingBio && (
             <View style={styles.bioSection}>
-              <Text style={styles.bioText}>"{currentUser.bio}"</Text>
+              <Text style={styles.bioText}>{currentUser.bio}</Text>
               <View style={styles.editBioBadge}>
                 <Text style={styles.editBioText} onPress={() => setIsEditingBio(true)}>
                   Edit Bio
@@ -263,6 +263,7 @@ export default function ProfileScreen() {
           )}
         </View>
 
+        {/* Stats Section (Posts, Connections, Likes) */}
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
             <Text style={styles.statNumber}>{userPosts.length}</Text>
@@ -278,6 +279,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Interests (Not gonna show anything unless interests exist) */}
         {currentUser.interests.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -294,12 +296,16 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {/* Academic info section   */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Award size={20} color={Colors.light.primary} />
             <Text style={styles.sectionTitle}>Academic Info</Text>
           </View>
+
           <View style={styles.infoCard}>
+
+            {/* Major */}
             <View style={styles.infoRow}>
               <View style={styles.infoIcon}>
                 <GraduationCap size={20} color={Colors.light.secondary} />
@@ -309,6 +315,19 @@ export default function ProfileScreen() {
                 <Text style={styles.infoValue}>{currentUser.major}</Text>
               </View>
             </View>
+
+            {/* Year */}
+            <View style={styles.infoRow}>
+              <View style={styles.infoIcon}>
+                <University size={20} color={Colors.light.secondary} />
+              </View>
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Year</Text>
+                <Text style={styles.infoValue}>{currentUser.year}</Text>
+              </View>
+            </View>
+
+            {/* Email */}
             <View style={styles.infoRow}>
               <View style={styles.infoIcon}>
                 <Mail size={20} color={Colors.light.secondary} />
@@ -318,8 +337,10 @@ export default function ProfileScreen() {
                 <Text style={styles.infoValue}>{currentUser.email}</Text>
               </View>
             </View>
+
           </View>
         </View>
+
 
         <View style={styles.joinedSection}>
           <Text style={styles.joinedText}>

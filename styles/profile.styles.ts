@@ -16,7 +16,7 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     paddingTop: 32,
-    paddingBottom: 24,
+    paddingBottom: 12,
     backgroundColor: Colors.light.qrBackground,
   },
   avatarContainer: {
@@ -29,9 +29,10 @@ const styles = StyleSheet.create({
     borderRadius: 60,
     marginBottom: 16,
     borderWidth: 4,
-    borderColor: '#ffffff',
+    borderColor: '#ffffff', 
   },
-  editIconButton: {
+  // For profile picture edit button
+  editProfileIconButton: { 
     position: 'absolute',
     bottom: 10,
     right: 10,
@@ -74,14 +75,14 @@ const styles = StyleSheet.create({
   bioSection: {
     alignItems: 'center',
     marginTop: 16,
-    marginBottom: 8,
+    marginBottom: 2,
   },
   bioText: {
     fontSize: 18,
     fontWeight: '600',
     color: Colors.light.text,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   addBioSection: {
     padding: 16,
@@ -107,14 +108,14 @@ const styles = StyleSheet.create({
   statsContainer: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    paddingVertical: 20,
-    gap: 12,
+    paddingVertical: 10,
+    gap: 12, //spacing between Posts, Connections, and Likes
   },
   statCard: {
     flex: 1,
     backgroundColor: Colors.light.card,
     borderRadius: 12,
-    padding: 16,
+    padding: 15,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -135,7 +136,7 @@ const styles = StyleSheet.create({
   },
   section: {
     paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingVertical: 10,
   },
   sectionHeader: {
     flexDirection: 'row',
