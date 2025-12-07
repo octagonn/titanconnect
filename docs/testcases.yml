@@ -1,0 +1,126 @@
+# TitanConnect App Test Cases
+#  structure:
+# testcases:
+#    <screen_name>:
+#      <testing_type>:
+#       - name: "<test_case_name>"
+#         description: "<description_of_test_case>"
+#        steps: <steps_to_reproduce_the_test_case>
+
+testcases:
+  home:
+    functionality_testing:
+      - name: "Create Post"
+        description: "Test the post creation functionality."
+        steps:
+          - "Navigate to the Home screen."
+          - "Tap the create post button."
+          - "Enter post content and optionally select an image."
+          - "Submit the post."
+          - "Verify the post appears in the feed."
+
+      - name: "Toggle Like on Post"
+        description: "Test the like functionality on posts."
+        steps:
+          - "Navigate to the Home screen."
+          - "Tap the like button on a post."
+          - "Verify the like count increases."
+          - "Tap the like button again."
+          - "Verify the like count decreases."
+
+  messages:
+    functionality_testing:
+      - name: "Message Navigation"
+        description: "Ensure users can navigate to a conversation."
+        steps:
+          - "Navigate to the Messages screen."
+          - "Tap on a conversation."
+          - "Verify the chat screen for the selected conversation is displayed."
+
+    boundary_testing:
+      - name: "Unread Messages Badge"
+        description: "Verify the unread messages badge displays correctly."
+        steps:
+          - "Set unreadCount to 5 in the AppContext."
+          - "Launch the app."
+          - "Verify the badge displays '5' on the Messages tab."
+          - "Set unreadCount to 0 in the AppContext."
+          - "Verify the badge is not displayed."
+
+      - name: "Search Messages"
+        description: "Ensure the search functionality in Messages works."
+        steps:
+          - "Navigate to the Messages screen."
+          - "Enter a search query in the search bar."
+          - "Verify the displayed conversations match the query."
+          - "Clear the search query."
+          - "Verify all conversations are displayed."
+
+  events:
+    functionality_testing:
+      - name: "RSVP to Events"
+        description: "Ensure users can RSVP to events."
+        steps:
+          - "Navigate to the Events screen."
+          - "Tap the 'Going' button on an event."
+          - "Verify the button is highlighted."
+          - "Tap the 'Interested' button on the same event."
+          - "Verify the 'Going' button is unhighlighted and 'Interested' is highlighted."
+
+      - name: "Event Details"
+        description: "Verify event details are displayed correctly."
+        steps:
+          - "Navigate to the Events screen."
+          - "Tap on an event."
+          - "Verify the event details screen displays the correct information."
+
+  profile:
+    functionality_testing:
+      - name: "Profile Interests"
+        description: "Test the interests selection in the Profile screen."
+        steps:
+          - "Navigate to the Profile screen."
+          - "Select multiple interests."
+          - "Save the interests."
+          - "Verify the selected interests are displayed."
+
+    error_handling_testing:
+      - name: "Comment Actions"
+        description: "Test the comment actions (edit, delete)."
+        steps:
+          - "Navigate to a post with comments."
+          - "Tap the edit button on a comment."
+          - "Modify the comment text and save."
+          - "Verify the comment text is updated."
+          - "Tap the delete button on a comment."
+          - "Confirm the deletion."
+          - "Verify the comment is removed."
+
+  navigation:
+    functionality_testing:
+      - name: "Tab Navigation"
+        description: "Ensure all tabs are navigable and display the correct screens."
+        steps:
+          - "Launch the app."
+          - "Tap on the Home tab."
+          - "Verify the Home screen is displayed."
+          - "Tap on the Tap-In tab."
+          - "Verify the Tap-In screen is displayed."
+          - "Tap on the Messages tab."
+          - "Verify the Messages screen is displayed."
+          - "Tap on the Events tab."
+          - "Verify the Events screen is displayed."
+          - "Tap on the Profile tab."
+          - "Verify the Profile screen is displayed."
+
+report:
+  summary: "The test cases were executed to validate the functionality, boundary conditions, and error handling of the TitanConnect app. All major components were tested, including navigation, user interactions, and data handling."
+  findings:
+    - "All navigation-related test cases passed successfully."
+    - "Boundary tests for unread messages and search functionality revealed no issues."
+    - "Error handling in comment actions worked as expected."
+    - "No critical bugs were identified during testing."
+  recommendations:
+    - "Enhance test coverage for edge cases in post creation and event RSVP."
+    - "Implement automated regression testing to ensure future updates do not introduce bugs."
+    - "Optimize performance for large datasets in the Messages and Events screens."
