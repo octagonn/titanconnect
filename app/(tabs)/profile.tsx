@@ -1,7 +1,7 @@
 // app/(tabs)/profile.tsx
 import { useRouter, useNavigation } from 'expo-router';
 import { LogOut, Mail, GraduationCap, Award, Heart, Pencil, University } from 'lucide-react-native';
-import { useLayoutEffect, useCallback, useState } from 'react';
+import { useLayoutEffect, useCallback, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Alert, TextInput, Button, ActionSheetIOS, Platform } from 'react-native';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,19 +9,28 @@ import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { v4 as uuidv4 } from 'uuid';
-
+import * as FileSystem from 'expo-file-system/legacy';
+import { Buffer } from 'buffer';
+import EncodingType from 'expo-file-system';
 import styles from '../../styles/profile.styles';
-
+import { set } from 'zod';
+import { ActivityIndicator } from 'react-native';
+import { BlurView } from 'expo-blur';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const { currentUser, signOut } = useAuth();
   const { posts, connections } = useApp();
-
+  // Bio states
   const [isAddingBio, setIsAddingBio] = useState(false);
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [newBio, setNewBio] = useState('');
+  // avatar_url aka profile picture states
+  const [avatarUrl, setAvatarUrl] = useState(currentUser?.avatar);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+
+
 
   const handleSignOut = useCallback(() => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -85,85 +94,177 @@ export default function ProfileScreen() {
     }
   };
 
+  if (typeof global.Buffer === "undefined") {
+    global.Buffer = Buffer;
+  }
+
   const uploadProfilePicture = async (uri: string, userId: string) => {
     try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
+      console.log("STEP 1: Upload started. URI =", uri);
 
-      const fileName = `${userId}-${uuidv4()}`;
-      const { error } = await supabase.storage.from('avatars').upload(fileName, blob, {
-        contentType: blob.type,
-      });
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: "base64" });
+      const fileBytes = Buffer.from(base64, "base64");
+
+      const filePath = `${userId}.jpg`; // ALWAYS same name → overwrite
+
+      console.log("STEP 2: Checking if file exists…");
+
+      // List objects in the bucket root
+      const { data: existingFiles } = await supabase.storage
+        .from("avatars")
+        .list("", { search: filePath });
+
+      const fileExists = existingFiles?.some((f) => f.name === filePath);
+
+      let result, error;
+
+      if (fileExists) {
+        console.log("STEP 3: File exists → using update()");
+        ({ data: result, error } = await supabase.storage
+          .from("avatars")
+          .update(filePath, fileBytes, {
+            contentType: "image/jpeg",
+          }));
+      } else {
+        console.log("STEP 3: File does not exist → using upload()");
+        ({ data: result, error } = await supabase.storage
+          .from("avatars")
+          .upload(filePath, fileBytes, {
+            contentType: "image/jpeg",
+          }));
+      }
+
+      console.log("STEP 4: Upload/update response:", { result, error });
 
       if (error) {
-        Alert.alert('Error', 'Failed to upload profile picture. Please try again.');
+        Alert.alert(
+          "Upload Failed",
+          `Message: ${error.message}\nRaw:\n${JSON.stringify(error, null, 2)}`
+        );
         return null;
       }
 
-      const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
-      return data.publicUrl;
-    } catch (err) {
-      Alert.alert('Error', 'An unexpected error occurred while uploading the profile picture.');
+      const { data: urlData } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
+
+      // Add a version query param so CDN treats it as a different file (To avoid caching issues)
+      const freshUrl = `${urlData.publicUrl}?v=${Date.now()}`;
+
+      console.log("STEP 5: Fresh Public URL:", freshUrl);
+      return freshUrl;
+
+
+    } catch (err: any) {
+      console.log("UNEXPECTED ERROR:", err);
+      Alert.alert("Unexpected Error", err.message || err.toString());
       return null;
     }
   };
 
+
   const handleProfilePicAction = async () => {
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ['Cancel', 'Take Photo', 'Upload Photo'],
-          cancelButtonIndex: 0,
-        },
-        async (buttonIndex) => {
-          let result;
-          if (buttonIndex === 1) {
-            // Take Photo
-            const permission = await ImagePicker.requestCameraPermissionsAsync();
-            if (permission.granted) {
-              result = await ImagePicker.launchCameraAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
-                aspect: [1, 1],
-                quality: 1,
-              });
-            }
-          } else if (buttonIndex === 2) {
-            // Upload Photo
-            const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (permission.granted) {
-              result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
-                aspect: [1, 1],
-                quality: 1,
-              });
-            }
-          }
-
-          if (result && !result.canceled && currentUser) {
-            const publicUrl = await uploadProfilePicture(result.assets[0].uri, currentUser.id);
-            if (publicUrl) {
-              // Update the user's profile with the new avatar URL
-              const { error } = await supabase
-                .from('profiles')
-                .update({ avatar: publicUrl })
-                .eq('id', currentUser.id);
-
-              if (error) {
-                Alert.alert('Error', 'Failed to update profile picture. Please try again.');
-              } else {
-                Alert.alert('Success', 'Profile picture updated successfully!');
-                currentUser.avatar = publicUrl; // Update the local user object
-              }
-            }
-          }
-        }
-      );
-    } else {
-      Alert.alert('Unsupported Platform', 'This feature is only available on iOS.');
+    if (Platform.OS !== "ios") {
+      Alert.alert("Unsupported Platform", "This feature is only available on iOS.");
+      return;
     }
+
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options: ["Cancel", "Take Photo", "Upload Photo"],
+        cancelButtonIndex: 0,
+      },
+      async (buttonIndex) => {
+
+        // 🔥 Fix TypeScript error: ensure not null
+        if (!currentUser) return;
+
+        let result = null;
+
+        try {
+          // --- TAKE PHOTO ---
+          if (buttonIndex === 1) {
+            const { granted } = await ImagePicker.requestCameraPermissionsAsync();
+            if (!granted)
+              return Alert.alert("Permission Required", "Camera access is needed.");
+
+            result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 1,
+            });
+          }
+
+          // --- UPLOAD PHOTO ---
+          if (buttonIndex === 2) {
+            const { granted } =
+              await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!granted)
+              return Alert.alert(
+                "Permission Required",
+                "Photo library access is needed."
+              );
+
+            result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 1,
+            });
+          }
+
+          if (!result || result.canceled) return;
+
+          const selectedUri = result.assets[0].uri;
+
+          // Upload to Supabase Storage
+          setIsUploading(true);
+
+          const publicUrl = await uploadProfilePicture(selectedUri, currentUser.id);
+
+          if (!publicUrl) {
+            setIsUploading(false);
+            return;
+          }
+
+          const { data, error } = await supabase
+            .from("profiles")
+            .update({ avatar_url: publicUrl })
+            .eq("id", currentUser.id)
+            .select();
+
+          setIsUploading(false);
+
+
+          console.log("⬅ UPDATE RESULT:", { data, error });
+
+          if (error) {
+            return Alert.alert(
+              "Failed to update profile picture",
+              `Database error:\n${error.message}\n\nRaw:\n${JSON.stringify(
+                error,
+                null,
+                2
+              )}`
+            );
+          }
+
+          // 🔥 Instant UI update
+          setAvatarUrl(publicUrl);
+          currentUser.avatar = publicUrl;
+
+          Alert.alert("Success", "Profile picture updated successfully!");
+        } catch (err: any) {
+          setIsUploading(false);
+          console.log("PROFILE PIC ERROR:", err);
+          Alert.alert("Unexpected Error", err.message || err.toString());
+        }
+      }
+    );
   };
+
+
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -186,13 +287,25 @@ export default function ProfileScreen() {
 
   const totalLikes = userPosts.reduce((sum, post) => sum + post.likes, 0);
 
+
+  // Force avatar url to update after user changes it
+  useEffect(() => {
+    if (currentUser?.avatar) {
+      setAvatarUrl(`${currentUser.avatar}?v=${Date.now()}`); // ensure cache busting
+    }
+  }, [currentUser?.avatar]);
+
+
   return (
+
+
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
             <Image
-              source={{ uri: currentUser.avatar || 'https://i.pravatar.cc/150?img=0' }}
+              key={avatarUrl} //This forces re-render when URL changes for profile pic update
+              source={{ uri: avatarUrl || 'https://i.pravatar.cc/150?img=0' }}
               style={styles.avatar}
             />
             <TouchableOpacity style={styles.editProfileIconButton} onPress={handleProfilePicAction}>
@@ -348,6 +461,17 @@ export default function ProfileScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      {isUploading && (
+        <View style={styles.uploadOverlay} pointerEvents="auto">
+          <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
+
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={styles.uploadingText}>Updating profile photo…</Text>
+        </View>
+      )}
+
+
     </View>
   );
 }

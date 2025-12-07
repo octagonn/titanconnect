@@ -253,6 +253,28 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '500',
   },
+uploadOverlay: {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  zIndex: 999,
+  justifyContent: "center",
+  alignItems: "center",
+  backgroundColor: "rgba(0,0,0,0.25)", // fallback
+},
+
+uploadingText: {
+  marginTop: 16,
+  color: "#fff",
+  fontSize: 16,
+  fontWeight: "600",
+},
+
+
+
+
 })
 
 export default styles
