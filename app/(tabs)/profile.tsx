@@ -105,7 +105,7 @@ export default function ProfileScreen() {
       const base64 = await FileSystem.readAsStringAsync(uri, { encoding: "base64" });
       const fileBytes = Buffer.from(base64, "base64");
 
-      const filePath = `${userId}.jpg`; // ALWAYS same name → overwrite
+      const filePath = `${userId}.jpg`; // ALWAYS same name for each corresponding user
 
       console.log("STEP 2: Checking if file exists…");
 
@@ -148,7 +148,7 @@ export default function ProfileScreen() {
         .from("avatars")
         .getPublicUrl(filePath);
 
-      // Add a version query param so CDN treats it as a different file (To avoid caching issues)
+      // Add a version query param when uploading avatar_urls so CDN treats it as a different file (To avoid stale/caching issues)
       const freshUrl = `${urlData.publicUrl}?v=${Date.now()}`;
 
       console.log("STEP 5: Fresh Public URL:", freshUrl);
@@ -176,7 +176,6 @@ export default function ProfileScreen() {
       },
       async (buttonIndex) => {
 
-        // 🔥 Fix TypeScript error: ensure not null
         if (!currentUser) return;
 
         let result = null;
@@ -301,6 +300,8 @@ export default function ProfileScreen() {
 
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+        {/* -----------------------------Header Section-------------------------------------- */}
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
             <Image
@@ -308,9 +309,12 @@ export default function ProfileScreen() {
               source={{ uri: avatarUrl || 'https://i.pravatar.cc/150?img=0' }}
               style={styles.avatar}
             />
+
+            {/* Edit avatar_url iconbutton */}
             <TouchableOpacity style={styles.editProfileIconButton} onPress={handleProfilePicAction}>
-              <Pencil size={20} color="#ffffff" /> {/* Updated to use the Pencil icon */}
+              <Pencil size={20} color="#ffffff" />
             </TouchableOpacity>
+
           </View>
           <Text style={styles.name}>{currentUser.name}</Text>
           <View style={styles.majorAndYearContainer}>
@@ -375,6 +379,8 @@ export default function ProfileScreen() {
             </View>
           )}
         </View>
+
+        {/* -----------------------------Lower Section (not actually grouped in a singular <View> like the header section BTW)-------------------------------------- */}
 
         {/* Stats Section (Posts, Connections, Likes) */}
         <View style={styles.statsContainer}>
@@ -454,7 +460,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-
+        {/* Date Joined text */}
         <View style={styles.joinedSection}>
           <Text style={styles.joinedText}>
             Joined {currentUser.createdAt ? formatJoinDate(currentUser.createdAt) : 'Unknown'}
@@ -462,6 +468,7 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
 
+      {/* Conditional Blur for when user is uploading a new profile photo */}
       {isUploading && (
         <View style={styles.uploadOverlay} pointerEvents="auto">
           <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
