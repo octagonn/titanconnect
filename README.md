@@ -222,3 +222,90 @@ Alternative web deployment options:
 ## License
 
 Private project - All rights reserved
+
+```
+titanconnect
+├─ app
+│  ├─ (tabs)
+│  │  ├─ commentStyles.ts
+│  │  ├─ events.tsx
+│  │  ├─ home.tsx
+│  │  ├─ messages.tsx
+│  │  ├─ profile.tsx
+│  │  ├─ tap-in.tsx
+│  │  └─ _layout.tsx
+│  ├─ +not-found.tsx
+│  ├─ api
+│  │  ├─ comments
+│  │  │  └─ route.ts
+│  │  ├─ posts
+│  │  │  └─ likes
+│  │  │     └─ route.ts
+│  │  └─ [...route]+api.ts
+│  ├─ auth
+│  │  └─ email-password.tsx
+│  ├─ chat
+│  │  └─ [id].tsx
+│  ├─ components
+│  ├─ index.tsx
+│  ├─ post
+│  │  └─ [id].tsx
+│  ├─ setup-faculty.tsx
+│  ├─ setup-profile.tsx
+│  ├─ verify-email.tsx
+│  ├─ welcome.tsx
+│  └─ _layout.tsx
+├─ app.json
+├─ assets
+│  └─ images
+│     ├─ adaptive-icon.png
+│     ├─ favicon.png
+│     ├─ icon.png
+│     └─ splash-icon.png
+├─ backend
+│  ├─ hono.ts
+│  └─ trpc
+│     ├─ app-router.ts
+│     ├─ create-context.ts
+│     └─ routes
+│        ├─ example
+│        │  └─ hi
+│        │     └─ route.ts
+│        └─ posts
+│           └─ route.ts
+├─ constants
+│  └─ colors.ts
+├─ contexts
+│  ├─ AppContext.tsx
+│  └─ AuthContext.tsx
+├─ docs
+│  ├─ bugfile.yml
+│  └─ testcases.yml
+├─ env.local.template
+├─ eslint.config.js
+├─ gitignore
+├─ lib
+│  ├─ responsive.ts
+│  ├─ storage.ts
+│  ├─ supabase.ts
+│  └─ trpc.ts
+├─ mocks
+│  └─ data.ts
+├─ package-lock.json
+├─ package.json
+├─ README.md
+├─ styles
+│  └─ profile.styles.ts
+├─ supabase
+│  ├─ config.toml
+│  └─ migrations
+│     ├─ 20251118053602_remote_schema.sql
+│     ├─ 20251118102717_add-role-to-profiles.sql
+│     └─ 20251202000000_storage_setup.sql
+├─ supabase-schema.sql
+├─ SUPABASE_SETUP.md
+├─ tsconfig.json
+└─ types
+   └─ index.ts
+
+```
