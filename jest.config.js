@@ -1,7 +1,6 @@
 // jest.config.js
 module.exports = {
   preset: "jest-expo",
-
   testEnvironment: "node",
 
   transformIgnorePatterns: [
@@ -10,6 +9,7 @@ module.exports = {
 
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/$1",
+    "^@/lib/supabase$": "<rootDir>/mocks/supabase.ts",
     "\\.(png|jpg|jpeg)$": "<rootDir>/tests/fileMock.js"
   },
 

@@ -1,5 +1,10 @@
+// tests/profileUtils.test.ts
+
 import { limitBio, formatJoinDate } from "@/lib/profileUtils";
 
+// Tests for export functions in
+//  /lib/profileUtils.ts
+// use `npm tests` to run Jest tests from root
 describe("limitBio", () => {
   test("allows bio under 150 chars", () => {
     expect(limitBio("hello")).toBe("hello");
