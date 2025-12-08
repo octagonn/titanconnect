@@ -3,12 +3,14 @@ import { useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
+import { useApp } from '@/contexts/AppContext';
 import { trpc } from '@/lib/trpc';
 
 export default function OtherProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { currentUser } = useAuth();
+  const { conversationsQuery } = useApp();
 
   useEffect(() => {
     if (currentUser && id === currentUser.id) {
@@ -34,7 +36,13 @@ export default function OtherProfileScreen() {
   });
 
   const upsertConversation = trpc.messages.upsertConversation.useMutation({
-    onSuccess: (conv) => router.push(`/chat/${conv.id}` as any),
+    onSuccess: (conv) => {
+      conversationsQuery.refetch();
+      router.push(`/chat/${conv.id}` as any);
+    },
+    onError: (err) => {
+      Alert.alert('Message failed', err.message || 'Could not start conversation. Please try again.');
+    },
   });
 
   const relationship = profileQuery.data?.relationship;

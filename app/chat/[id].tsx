@@ -31,7 +31,13 @@ export default function ChatScreen() {
   const [messageText, setMessageText] = useState<string>('');
   const flatListRef = useRef<FlatList>(null);
 
-  const conversation = conversations.find((conv) => conv.id === id);
+  const conversationFromList = conversations.find((conv) => conv.id === id);
+  const conversationQuery = trpc.messages.getConversation.useQuery(
+    { conversationId: id! },
+    { enabled: !!id && !conversationFromList }
+  );
+
+  const conversation = conversationFromList || conversationQuery.data || null;
   const otherUser = conversation ? (conversation as any).otherUser || getOtherParticipant(conversation) : null;
 
   const messagesQuery = trpc.messages.getMessages.useInfiniteQuery(
@@ -46,6 +52,9 @@ export default function ChatScreen() {
     onSuccess: () => {
       setMessageText('');
       messagesQuery.refetch();
+    },
+    onError: (err) => {
+      Alert.alert('Send failed', err.message || 'Could not send message. Please try again.');
     },
   });
 
@@ -71,11 +80,21 @@ export default function ChatScreen() {
     }
   }, [navigation, otherUser, router]);
 
+  const [markingRead, setMarkingRead] = useState(false);
+
   useEffect(() => {
-    if (id && conversationMessages.length) {
-      markMessagesAsRead(id);
-    }
-  }, [id, markMessagesAsRead, conversationMessages.length]);
+    if (!id || !currentUser) return;
+    if (markingRead) return;
+
+    const hasUnread = conversationMessages.some(
+      (m) => m.receiverId === currentUser.id && !m.read
+    );
+
+    if (!hasUnread) return;
+
+    setMarkingRead(true);
+    markMessagesAsRead(id).finally(() => setMarkingRead(false));
+  }, [id, currentUser?.id, conversationMessages, markingRead, markMessagesAsRead]);
 
   const handleSend = useCallback(() => {
     if (!messageText.trim() || !otherUser || !currentUser) return;
@@ -139,6 +158,15 @@ export default function ChatScreen() {
   );
 
   if (!conversation || !otherUser) {
+    if (conversationQuery.isLoading) {
+      return (
+        <View style={styles.container}>
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>Loading conversation...</Text>
+          </View>
+        </View>
+      );
+    }
     return (
       <View style={styles.container}>
         <View style={styles.errorContainer}>

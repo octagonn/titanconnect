@@ -136,6 +136,8 @@ function RootLayoutNav() {
 
     const rootSegment = segments[0];
     const inTabsGroup = rootSegment === '(tabs)';
+    const inChat = rootSegment === 'chat';
+    const inProfile = rootSegment === 'profile';
     const inStudentOnboarding = rootSegment === 'setup-profile';
     const inFacultyOnboarding = rootSegment === 'setup-faculty';
     const inOnboarding = inStudentOnboarding || inFacultyOnboarding;
@@ -159,7 +161,7 @@ function RootLayoutNav() {
       return;
     }
 
-    if (isAuthenticated && !inTabsGroup) {
+    if (isAuthenticated && !inTabsGroup && !inChat && !inProfile) {
       router.replace('/(tabs)/home');
     }
   }, [isLoading, isAuthenticated, currentUser, segments, router]);

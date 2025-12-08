@@ -11,6 +11,7 @@ import {
   TextInput,
   Modal,
   Pressable,
+  Alert,
 } from 'react-native';
 import Colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
@@ -33,8 +34,13 @@ export default function MessagesScreen() {
   });
   const upsertConversation = trpc.messages.upsertConversation.useMutation({
     onSuccess: (conv) => {
+      // Refresh conversations so Chat screen has the conversation in context
+      conversationsQuery.refetch();
       setShowNewMessage(false);
       router.push(`/chat/${conv.id}` as any);
+    },
+    onError: (err) => {
+      Alert.alert('Message failed', err.message || 'Could not start conversation. Please try again.');
     },
   });
 

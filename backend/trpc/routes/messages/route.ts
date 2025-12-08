@@ -17,35 +17,74 @@ const generateParticipants = (userA: string, userB: string) => {
   return [userA, userB].sort();
 };
 
+const findOrCreateConversation = async (
+  supabase: any,
+  userId: string,
+  otherUserId: string,
+) => {
+  const participants = generateParticipants(userId, otherUserId);
+
+  // Try to find an existing conversation that contains exactly these participants
+  const { data: existingList, error: fetchError } = await supabase
+    .from("conversations")
+    .select("id, participant_ids, updated_at")
+    .contains("participant_ids", participants)
+    .order("updated_at", { ascending: false });
+
+  if (fetchError) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: fetchError.message,
+    });
+  }
+
+  const exactMatch =
+    existingList?.find(
+      (conv: any) =>
+        Array.isArray(conv.participant_ids) &&
+        conv.participant_ids.length === participants.length &&
+        participants.every((p, idx) => conv.participant_ids[idx] === p)
+    ) || null;
+
+  if (exactMatch) {
+    return {
+      id: exactMatch.id,
+      participants: exactMatch.participant_ids,
+      participantIds: exactMatch.participant_ids,
+      lastMessageAt: exactMatch.updated_at,
+      updatedAt: exactMatch.updated_at,
+    };
+  }
+
+  // No conversation yet - create one
+  const { data, error } = await supabase
+    .from("conversations")
+    .insert({ participant_ids: participants })
+    .select()
+    .maybeSingle();
+
+  if (error || !data) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: error?.message || "Failed to create conversation",
+    });
+  }
+
+  return {
+    id: data.id,
+    participants: data.participant_ids,
+    participantIds: data.participant_ids,
+    lastMessageAt: data.updated_at,
+    updatedAt: data.updated_at,
+  };
+};
+
 export const messagesRouter = createTRPCRouter({
   upsertConversation: protectedProcedure
     .input(z.object({ otherUserId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
-      const participants = generateParticipants(userId, input.otherUserId);
-
-      const { data, error } = await ctx.supabase
-        .from("conversations")
-        .upsert(
-          {
-            participant_ids: participants,
-          },
-          { onConflict: "participants_hash" }
-        )
-        .select()
-        .maybeSingle();
-
-      if (error || !data) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error?.message || "Upsert failed" });
-      }
-
-      return {
-        id: data.id,
-        participants: data.participant_ids,
-        participantIds: data.participant_ids,
-        lastMessageAt: data.last_message_at,
-        updatedAt: data.updated_at,
-      };
+      return findOrCreateConversation(ctx.supabase, userId, input.otherUserId);
     }),
 
   listConversations: protectedProcedure.query(async ({ ctx }) => {
@@ -53,9 +92,9 @@ export const messagesRouter = createTRPCRouter({
 
     const { data: conversations, error } = await ctx.supabase
       .from("conversations")
-      .select("id, participant_ids, last_message_at, updated_at")
+      .select("id, participant_ids, updated_at")
       .contains("participant_ids", [userId])
-      .order("last_message_at", { ascending: false });
+      .order("updated_at", { ascending: false });
 
     if (error) {
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
@@ -125,12 +164,55 @@ export const messagesRouter = createTRPCRouter({
               createdAt: last.created_at,
             }
           : null,
-        lastMessageAt: conv.last_message_at,
+        lastMessageAt: conv.updated_at,
         updatedAt: conv.updated_at,
         unreadCount: unreadByConversation[conv.id] || 0,
       };
     });
   }),
+
+  getConversation: protectedProcedure
+    .input(z.object({ conversationId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      const { conversationId } = input;
+
+      const { data: conv, error: convError } = await ctx.supabase
+        .from("conversations")
+        .select("id, participant_ids, updated_at")
+        .eq("id", conversationId)
+        .maybeSingle();
+
+      if (convError) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: convError.message });
+      }
+      if (!conv || !conv.participant_ids?.includes(userId)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not a participant" });
+      }
+
+      const otherId = conv.participant_ids.find((p: string) => p !== userId);
+      let otherUser = null;
+      if (otherId) {
+        const { data: profile, error: profileError } = await ctx.supabase
+          .from("profiles")
+          .select("id, name, avatar_url")
+          .eq("id", otherId)
+          .maybeSingle();
+        if (profileError) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: profileError.message });
+        }
+        otherUser = profile || null;
+      }
+
+      return {
+        id: conv.id,
+        participants: conv.participant_ids,
+        participantIds: conv.participant_ids,
+        otherUser,
+        lastMessageAt: conv.updated_at,
+        updatedAt: conv.updated_at,
+      };
+    }),
 
   getMessages: protectedProcedure
     .input(
@@ -210,25 +292,7 @@ export const messagesRouter = createTRPCRouter({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot message yourself" });
       }
 
-      const participants = generateParticipants(userId, otherUserId);
-
-      const { data: conversation, error: convError } = await ctx.supabase
-        .from("conversations")
-        .upsert(
-          {
-            participant_ids: participants,
-          },
-          { onConflict: "participants_hash" }
-        )
-        .select()
-        .maybeSingle();
-
-      if (convError || !conversation) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: convError?.message || "Failed to upsert conversation",
-        });
-      }
+  const conversation = await findOrCreateConversation(ctx.supabase, userId, otherUserId);
 
       const { data: message, error } = await ctx.supabase
         .from("messages")
@@ -245,6 +309,12 @@ export const messagesRouter = createTRPCRouter({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error?.message || "Send failed" });
       }
 
+      // Touch the conversation updated_at for ordering
+      await ctx.supabase
+        .from("conversations")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", conversation.id);
+
       return {
         id: message.id,
         conversationId: message.conversation_id,
@@ -254,7 +324,7 @@ export const messagesRouter = createTRPCRouter({
         read: message.read,
         deletedAt: message.deleted_at,
         createdAt: message.created_at,
-        participants,
+        participants: conversation.participantIds,
       };
     }),
 
