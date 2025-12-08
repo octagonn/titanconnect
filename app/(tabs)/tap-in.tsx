@@ -6,6 +6,7 @@ import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { trpc } from '@/lib/trpc';
 import { useRouter } from 'expo-router';
+import * as Linking from 'expo-linking';
 
 type TabType = 'qr' | 'scan';
 
@@ -31,9 +32,12 @@ export default function TapInScreen() {
 
   const handleScan = async (data: string) => {
     try {
+      // Support both app scheme (myapp:// or exp://…) and plain URLs
+      const parsed = Linking.parse(data);
+      const path = parsed.path || '';
       const maybeToken =
-        data.match(/titan:\/\/p\/([A-Za-z0-9-]+)/)?.[1] ||
-        data.match(/\/p\/([A-Za-z0-9-]+)/)?.[1] ||
+        // handles /p/{token} or p/{token}
+        path.split('/').filter(Boolean).pop() ||
         data.split('/').pop();
 
       if (!maybeToken) {
@@ -62,7 +66,8 @@ export default function TapInScreen() {
 
   const qrData = useMemo(() => {
     if (!token || !currentUser) return null;
-    const payload = `titan://p/${token}`;
+    // Use expo-linking to build a deep link that works in Expo (exp://) and the custom scheme (myapp://)
+    const payload = Linking.createURL(`/p/${token}`);
     const remote = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(payload)}`;
     return { payload, url: remote };
   }, [token, currentUser]);
