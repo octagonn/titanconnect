@@ -590,15 +590,24 @@ export default function HomeScreen() {
   );
 
   const sendRequest = trpc.connections.sendRequest.useMutation({
-    onSuccess: () => profileQuery.refetch(),
+    onSuccess: () => {
+      profileQuery.refetch();
+      closeProfileModal();
+    },
   });
 
   const respond = trpc.connections.respond.useMutation({
-    onSuccess: () => profileQuery.refetch(),
+    onSuccess: () => {
+      profileQuery.refetch();
+      closeProfileModal();
+    },
   });
 
   const removeConnection = trpc.connections.remove.useMutation({
-    onSuccess: () => profileQuery.refetch(),
+    onSuccess: () => {
+      profileQuery.refetch();
+      closeProfileModal();
+    },
   });
 
   const upsertConversation = trpc.messages.upsertConversation.useMutation({
@@ -609,8 +618,9 @@ export default function HomeScreen() {
   });
 
   const handleFriendAction = useCallback(() => {
-    if (!profileQuery.data) return;
-    const { relationship, connectionId, id } = profileQuery.data;
+    const data = profileQuery.data;
+    if (!data || !data.id) return;
+    const { relationship, connectionId, id } = data;
     if (relationship === 'none') {
       sendRequest.mutate({ targetUserId: id });
       return;
