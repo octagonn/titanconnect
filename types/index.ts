@@ -72,6 +72,7 @@ export interface Message {
   receiverId: string;
   content: string;
   read: boolean;
+  deletedAt?: string | null;
   createdAt: string;
 }
 
@@ -79,5 +80,27 @@ export interface Conversation {
   id: string;
   participants: string[];
   lastMessage?: Message;
+  lastMessageAt?: string;
   updatedAt: string;
+  unreadCount?: number;
+  otherUser?: {
+    id: string;
+    name?: string;
+    avatar?: string;
+  } | null;
+}
+
+export type ConnectionStatus = 'pending' | 'accepted' | 'blocked';
+
+export interface ConnectionWithUser {
+  id: string;
+  status: ConnectionStatus;
+  createdAt: string;
+  updatedAt?: string;
+  direction: 'incoming' | 'outgoing';
+  otherUser: {
+    id: string;
+    name: string;
+    avatar?: string;
+  } | null;
 }

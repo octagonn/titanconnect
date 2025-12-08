@@ -1,5 +1,7 @@
 import { supabase } from './supabase';
-import * as FileSystem from 'expo-file-system';
+// Use the legacy API to avoid runtime errors in SDK 54+ while we migrate to the
+// new File/Directory-based filesystem API.
+import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { Platform } from 'react-native';
 
@@ -18,11 +20,11 @@ export async function uploadImage(bucket: string, uri: string): Promise<string |
       const response = await fetch(uri);
       blobOrBuffer = await response.blob();
     } else {
-      // Read file as base64
+      // Read file as base64 (string literal avoids missing enum on some runtimes)
       const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
+        encoding: 'base64',
       });
-      // Convert to ArrayBuffer
+      // Convert to ArrayBuffer for Supabase storage
       blobOrBuffer = decode(base64);
     }
 

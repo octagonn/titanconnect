@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { Send } from 'lucide-react-native';
 import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import {
@@ -11,88 +11,131 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Alert,
 } from 'react-native';
 import Colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Message } from '@/types';
+import { trpc } from '@/lib/trpc';
+import { useMessageRealtime } from '@/hooks/useMessageRealtime';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const navigation = useNavigation();
+  const router = useRouter();
   const { currentUser } = useAuth();
-  const {
-    conversations,
-    getConversationMessages,
-    getOtherParticipant,
-    sendMessage,
-    markMessagesAsRead,
-  } = useApp();
+  const { conversations, getOtherParticipant, markMessagesAsRead } = useApp();
+  useMessageRealtime();
 
   const [messageText, setMessageText] = useState<string>('');
   const flatListRef = useRef<FlatList>(null);
 
   const conversation = conversations.find((conv) => conv.id === id);
-  const otherUser = conversation ? getOtherParticipant(conversation) : null;
-  const conversationMessages = id ? getConversationMessages(id) : [];
+  const otherUser = conversation ? (conversation as any).otherUser || getOtherParticipant(conversation) : null;
+
+  const messagesQuery = trpc.messages.getMessages.useInfiniteQuery(
+    { conversationId: id!, limit: 50 },
+    {
+      enabled: !!id && !!currentUser,
+      getNextPageParam: (last) => last.nextCursor ?? undefined,
+    }
+  );
+
+  const sendMessageMutation = trpc.messages.sendMessage.useMutation({
+    onSuccess: () => {
+      setMessageText('');
+      messagesQuery.refetch();
+    },
+  });
+
+  const deleteMessageMutation = trpc.messages.deleteMessage.useMutation({
+    onSuccess: () => {
+      messagesQuery.refetch();
+    },
+  });
+
+  const conversationMessages =
+    messagesQuery.data?.pages.flatMap((page) => page.items).filter((m) => !m.deletedAt) ?? [];
 
   useLayoutEffect(() => {
     if (otherUser) {
       navigation.setOptions({
         title: otherUser.name,
+        headerRight: () => (
+          <TouchableOpacity onPress={() => router.push(`/profile/${otherUser.id}` as any)}>
+            <Text style={{ color: Colors.light.primary, fontWeight: '600' }}>Profile</Text>
+          </TouchableOpacity>
+        ),
       });
     }
-  }, [navigation, otherUser]);
+  }, [navigation, otherUser, router]);
 
   useEffect(() => {
-    if (id) {
+    if (id && conversationMessages.length) {
       markMessagesAsRead(id);
     }
-  }, [id, markMessagesAsRead]);
+  }, [id, markMessagesAsRead, conversationMessages.length]);
 
   const handleSend = useCallback(() => {
     if (!messageText.trim() || !otherUser || !currentUser) return;
 
-    sendMessage(otherUser.id, messageText.trim());
-    setMessageText('');
-
+    sendMessageMutation.mutate({ otherUserId: otherUser.id, content: messageText.trim() });
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 100);
-  }, [messageText, otherUser, currentUser, sendMessage]);
+  }, [messageText, otherUser, currentUser, sendMessageMutation]);
+
+  const confirmDelete = useCallback(
+    (message: Message) => {
+      Alert.alert('Delete message?', 'This will remove the message for both participants.', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteMessageMutation.mutate({ messageId: message.id }),
+        },
+      ]);
+    },
+    [deleteMessageMutation]
+  );
 
   const renderMessage = useCallback(
     ({ item }: { item: Message }) => {
       const isMe = item.senderId === currentUser?.id;
 
       return (
-        <View
-          style={[styles.messageContainer, isMe ? styles.myMessage : styles.theirMessage]}
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onLongPress={() => confirmDelete(item)}
+          delayLongPress={300}
         >
-          {!isMe && otherUser && (
-            <Image
-              source={{ uri: otherUser.avatar || 'https://i.pravatar.cc/150?img=0' }}
-              style={styles.messageAvatar}
-            />
-          )}
-          <View style={[styles.messageBubble, isMe ? styles.myBubble : styles.theirBubble]}>
-            <Text style={[styles.messageText, isMe && styles.myMessageText]}>
-              {item.content}
-            </Text>
-            <Text style={[styles.messageTime, isMe && styles.myMessageTime]}>
-              {formatTime(item.createdAt)}
-            </Text>
+          <View style={[styles.messageContainer, isMe ? styles.myMessage : styles.theirMessage]}>
+            {!isMe && otherUser && (
+              <Image
+                source={{ uri: otherUser.avatar || 'https://i.pravatar.cc/150?img=0' }}
+                style={styles.messageAvatar}
+              />
+            )}
+            <View style={[styles.messageBubble, isMe ? styles.myBubble : styles.theirBubble]}>
+              <Text style={[styles.messageText, isMe && styles.myMessageText]}>
+                {item.content}
+              </Text>
+              <Text style={[styles.messageTime, isMe && styles.myMessageTime]}>
+                {formatTime(item.createdAt)}
+              </Text>
+            </View>
+            {isMe && currentUser && (
+              <Image
+                source={{ uri: currentUser.avatar || 'https://i.pravatar.cc/150?img=0' }}
+                style={styles.messageAvatar}
+              />
+            )}
           </View>
-          {isMe && currentUser && (
-            <Image
-              source={{ uri: currentUser.avatar || 'https://i.pravatar.cc/150?img=0' }}
-              style={styles.messageAvatar}
-            />
-          )}
-        </View>
+        </TouchableOpacity>
       );
     },
-    [currentUser, otherUser]
+    [currentUser, otherUser, confirmDelete]
   );
 
   if (!conversation || !otherUser) {
@@ -120,6 +163,8 @@ export default function ChatScreen() {
         contentContainerStyle={styles.messagesList}
         showsVerticalScrollIndicator={false}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+        refreshing={messagesQuery.isRefetching}
+        onRefresh={messagesQuery.refetch}
       />
 
       <View style={styles.inputContainer}>

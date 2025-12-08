@@ -10,6 +10,8 @@ interface SignInResult {
   success: boolean;
   isVerified?: boolean;
   needsVerification?: boolean;
+  invalidCredentials?: boolean;
+  message?: string;
 }
 
 interface SignUpResult {
@@ -104,7 +106,20 @@ export const [AuthContext, useAuth] = createContextHook(() => {
             return { success: false, needsVerification: true };
           }
 
-          // Invalid credentials or user not found will be handled by caller
+          // Invalid credentials or user not found
+          if (
+            message.includes('invalid login') ||
+            message.includes('invalid email or password') ||
+            message.includes('invalid credentials') ||
+            message.includes('invalid password')
+          ) {
+            return {
+              success: false,
+              invalidCredentials: true,
+              message: 'Invalid email or password.',
+            };
+          }
+
           throw error;
         }
 

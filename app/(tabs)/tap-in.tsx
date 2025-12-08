@@ -1,44 +1,48 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { QrCode, Scan, Users } from 'lucide-react-native';
-import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Alert } from 'react-native';
+import { useMemo, useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Alert, ScrollView, Image } from 'react-native';
 import Colors from '@/constants/colors';
-import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { mockUsers } from '@/mocks/data';
+import { trpc } from '@/lib/trpc';
+import { useRouter } from 'expo-router';
 
 type TabType = 'qr' | 'scan';
 
 export default function TapInScreen() {
   const { currentUser } = useAuth();
-  const { addConnection, connections } = useApp();
+  const router = useRouter();
+  const connectionsQuery = trpc.connections.list.useQuery(undefined, { enabled: !!currentUser });
+  const qrToken = trpc.profileQr.getOrCreate.useMutation();
+  const [scannedToken, setScannedToken] = useState<string | null>(null);
+  const resolveToken = trpc.profileQr.resolve.useQuery(
+    { token: scannedToken || '' },
+    {
+      enabled: !!scannedToken,
+      retry: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    }
+  );
   const [activeTab, setActiveTab] = useState<TabType>('qr');
   const [showScanner, setShowScanner] = useState<boolean>(false);
   const [permission, requestPermission] = useCameraPermissions();
+  const [token, setToken] = useState<string | null>(null);
 
-  const handleScan = (data: string) => {
+  const handleScan = async (data: string) => {
     try {
-      const scannedUserId = data;
-      const user = mockUsers.find((u) => u.id === scannedUserId);
+      const maybeToken =
+        data.match(/titan:\/\/p\/([A-Za-z0-9-]+)/)?.[1] ||
+        data.match(/\/p\/([A-Za-z0-9-]+)/)?.[1] ||
+        data.split('/').pop();
 
-      if (user && currentUser && user.id !== currentUser.id) {
-        const alreadyConnected = connections.some(
-          (c) =>
-            (c.userId === currentUser.id && c.connectedUserId === user.id) ||
-            (c.connectedUserId === currentUser.id && c.userId === user.id)
-        );
-
-        if (!alreadyConnected) {
-          addConnection(user.id);
-          Alert.alert('Success!', `You are now connected with ${user.name}`);
-        } else {
-          Alert.alert('Already Connected', `You are already connected with ${user.name}`);
-        }
-      } else {
-        Alert.alert('Invalid QR Code', 'This QR code is not valid');
+      if (!maybeToken) {
+        Alert.alert('Invalid QR Code', 'Unrecognized code');
+        setShowScanner(false);
+        return;
       }
 
-      setShowScanner(false);
+      setScannedToken(maybeToken);
     } catch (error) {
       console.error('Scan error:', error);
       Alert.alert('Error', 'Failed to scan QR code');
@@ -56,9 +60,49 @@ export default function TapInScreen() {
     setShowScanner(true);
   };
 
-  const connectionCount = connections.filter(
-    (c) => currentUser && (c.userId === currentUser.id || c.connectedUserId === currentUser.id)
-  ).length;
+  const qrData = useMemo(() => {
+    if (!token || !currentUser) return null;
+    const payload = `titan://p/${token}`;
+    const remote = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(payload)}`;
+    return { payload, url: remote };
+  }, [token, currentUser]);
+
+  const connectionCount = useMemo(() => {
+    if (!connectionsQuery.data || !currentUser) return 0;
+    return connectionsQuery.data.filter(
+      (c: any) => c.otherUser && c.status === 'accepted'
+    ).length;
+  }, [connectionsQuery.data, currentUser]);
+
+  const ensureToken = useCallback(async () => {
+    if (token || qrToken.isPending) return;
+    const res = await qrToken.mutateAsync();
+    setToken(res.token);
+  }, [qrToken, token]);
+
+  useEffect(() => {
+    if (currentUser) {
+      ensureToken();
+    }
+  }, [currentUser, ensureToken]);
+
+  useEffect(() => {
+    if (resolveToken.isError) {
+      Alert.alert('Invalid QR Code', 'This code is not recognized.');
+      setShowScanner(false);
+      setScannedToken(null);
+    }
+    if (resolveToken.data?.userId) {
+      const userId = resolveToken.data.userId;
+      if (currentUser && userId === currentUser.id) {
+        router.push('/(tabs)/profile');
+      } else {
+        router.push({ pathname: '/profile/[id]', params: { id: userId } });
+      }
+      setShowScanner(false);
+      setScannedToken(null);
+    }
+  }, [resolveToken.data, resolveToken.isError, currentUser, router]);
 
   return (
     <View style={styles.container}>
@@ -94,67 +138,79 @@ export default function TapInScreen() {
         </TouchableOpacity>
       </View>
 
-      {activeTab === 'qr' ? (
-        <View style={styles.content}>
-          <View style={styles.qrContainer}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {activeTab === 'qr' ? (
+          <View style={styles.sectionStack}>
+            <View style={styles.qrContainer}>
             <View style={styles.qrCodePlaceholder}>
-              <QrCode size={200} color={Colors.light.primary} />
-              <Text style={styles.qrUserId}>{currentUser?.id || 'USER'}</Text>
+              {qrData ? (
+                <>
+                  <Image source={{ uri: qrData.url }} style={styles.qrImage} />
+                  <Text style={styles.qrUserId}>{qrData.payload}</Text>
+                </>
+              ) : (
+                <Text style={styles.qrUserId}>Generating...</Text>
+              )}
             </View>
-          </View>
+            </View>
 
-          <View style={styles.instructionsCard}>
-            <Text style={styles.instructionsTitle}>How to Tap-In</Text>
-            <View style={styles.instructionsList}>
-              <View style={styles.instructionItem}>
-                <View style={styles.instructionNumber}>
-                  <Text style={styles.instructionNumberText}>1</Text>
+            <View style={styles.instructionsCard}>
+              <Text style={styles.instructionsTitle}>How to Tap-In</Text>
+              <View style={styles.instructionsList}>
+                <View style={styles.instructionItem}>
+                  <View style={styles.instructionNumber}>
+                    <Text style={styles.instructionNumberText}>1</Text>
+                  </View>
+                  <Text style={styles.instructionText}>Show your QR code to another student</Text>
                 </View>
-                <Text style={styles.instructionText}>Show your QR code to another student</Text>
-              </View>
-              <View style={styles.instructionItem}>
-                <View style={styles.instructionNumber}>
-                  <Text style={styles.instructionNumberText}>2</Text>
+                <View style={styles.instructionItem}>
+                  <View style={styles.instructionNumber}>
+                    <Text style={styles.instructionNumberText}>2</Text>
+                  </View>
+                  <Text style={styles.instructionText}>They scan it with their camera</Text>
                 </View>
-                <Text style={styles.instructionText}>They scan it with their camera</Text>
-              </View>
-              <View style={styles.instructionItem}>
-                <View style={styles.instructionNumber}>
-                  <Text style={styles.instructionNumberText}>3</Text>
+                <View style={styles.instructionItem}>
+                  <View style={styles.instructionNumber}>
+                    <Text style={styles.instructionNumberText}>3</Text>
+                  </View>
+                  <Text style={styles.instructionText}>You&apos;re instantly connected!</Text>
                 </View>
-                <Text style={styles.instructionText}>You&apos;re instantly connected!</Text>
               </View>
             </View>
           </View>
-        </View>
-      ) : (
-        <View style={styles.content}>
-          <View style={styles.scanContainer}>
-            <View style={styles.scanPlaceholder}>
-              <Scan size={64} color={Colors.light.primary} />
-              <Text style={styles.scanTitle}>Scan a QR Code</Text>
-              <Text style={styles.scanSubtitle}>
-                Point your camera at another student&apos;s QR code
-              </Text>
-              <TouchableOpacity
-                style={styles.scanButton}
-                onPress={handleScanPress}
-                testID="open-scanner-button"
-              >
-                <Text style={styles.scanButtonText}>Open Camera</Text>
-              </TouchableOpacity>
+        ) : (
+          <View style={styles.sectionStack}>
+            <View style={styles.scanContainer}>
+              <View style={styles.scanPlaceholder}>
+                <Scan size={64} color={Colors.light.primary} />
+                <Text style={styles.scanTitle}>Scan a QR Code</Text>
+                <Text style={styles.scanSubtitle}>
+                  Point your camera at another student&apos;s QR code
+                </Text>
+                <TouchableOpacity
+                  style={styles.scanButton}
+                  onPress={handleScanPress}
+                  testID="open-scanner-button"
+                >
+                  <Text style={styles.scanButtonText}>Open Camera</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
 
-          <View style={styles.tipsCard}>
-            <Text style={styles.tipsTitle}>Scanning Tips</Text>
-            <Text style={styles.tipText}>• Hold your phone steady</Text>
-            <Text style={styles.tipText}>• Ensure good lighting</Text>
-            <Text style={styles.tipText}>• Keep the QR code centered</Text>
-            <Text style={styles.tipText}>• Works best at arm&apos;s length</Text>
+            <View style={styles.tipsCard}>
+              <Text style={styles.tipsTitle}>Scanning Tips</Text>
+              <Text style={styles.tipText}>• Hold your phone steady</Text>
+              <Text style={styles.tipText}>• Ensure good lighting</Text>
+              <Text style={styles.tipText}>• Keep the QR code centered</Text>
+              <Text style={styles.tipText}>• Works best at arm&apos;s length</Text>
+            </View>
           </View>
-        </View>
-      )}
+        )}
+      </ScrollView>
 
       <Modal visible={showScanner} animationType="slide" onRequestClose={() => setShowScanner(false)}>
         <View style={styles.scannerContainer}>
@@ -166,18 +222,17 @@ export default function TapInScreen() {
                 handleScan(result.data);
               }
             }}
-          >
-            <View style={styles.scannerOverlay}>
-              <Text style={styles.scannerText}>Scan a TitanConnect QR Code</Text>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setShowScanner(false)}
-                testID="close-scanner-button"
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </CameraView>
+          />
+          <View style={styles.scannerOverlay}>
+            <Text style={styles.scannerText}>Scan a TitanConnect QR Code</Text>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setShowScanner(false)}
+              testID="close-scanner-button"
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
     </View>
@@ -248,14 +303,25 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 200,
+    flexGrow: 1,
+    gap: 16,
+  },
+  sectionStack: {
+    gap: 16,
+  },
   qrContainer: {
     alignItems: 'center',
-    marginBottom: 32,
   },
   qrCodePlaceholder: {
     backgroundColor: Colors.light.qrBackground,
     borderRadius: 24,
-    padding: 32,
+    padding: 24,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -263,6 +329,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 5,
+  },
+  qrImage: {
+    width: 240,
+    height: 240,
+    marginBottom: 12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
   },
   qrUserId: {
     marginTop: 16,

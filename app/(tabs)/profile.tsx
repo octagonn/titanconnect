@@ -1,16 +1,49 @@
 import { useRouter, useNavigation } from 'expo-router';
-import { LogOut, Mail, GraduationCap, Award, Heart } from 'lucide-react-native';
-import { useLayoutEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Alert } from 'react-native';
+import { LogOut, Mail, GraduationCap, Award, Heart, Edit2, Image as ImageIcon, Save } from 'lucide-react-native';
+import { useLayoutEffect, useCallback, useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  ScrollView,
+  Alert,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
+import { uploadImage } from '@/lib/storage';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const navigation = useNavigation();
-  const { currentUser, signOut } = useAuth();
-  const { posts, connections } = useApp();
+  const { currentUser, signOut, updateUser } = useAuth();
+  const { connections } = useApp();
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [name, setName] = useState(currentUser?.name || '');
+  const [major, setMajor] = useState(currentUser?.major || '');
+  const [year, setYear] = useState(currentUser?.year || '');
+  const [bio, setBio] = useState(currentUser?.bio || '');
+  const [interests, setInterests] = useState((currentUser?.interests || []).join(', '));
+  const [avatarUri, setAvatarUri] = useState<string | undefined>(currentUser?.avatar);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    setName(currentUser.name || '');
+    setMajor(currentUser.major || '');
+    setYear(currentUser.year || '');
+    setBio(currentUser.bio || '');
+    setInterests((currentUser.interests || []).join(', '));
+    setAvatarUri(currentUser.avatar);
+  }, [currentUser, isEditing]);
 
   const handleSignOut = useCallback(() => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -19,19 +52,31 @@ export default function ProfileScreen() {
         text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
-          await signOut();
-          router.replace('/welcome');
+          if (signingOut) return;
+          setSigningOut(true);
+          try {
+            await signOut();
+          } catch (err) {
+            console.error('Sign out error', err);
+          } finally {
+            setSigningOut(false);
+          }
         },
       },
     ]);
-  }, [signOut, router]);
+  }, [signOut, signingOut]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity onPress={handleSignOut} style={styles.logoutButton}>
-          <LogOut size={20} color="#ffffff" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.editButton}>
+            <Edit2 size={18} color="#ffffff" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleSignOut} style={styles.logoutButton}>
+            <LogOut size={20} color="#ffffff" />
+          </TouchableOpacity>
+        </View>
       ),
     });
   }, [navigation, handleSignOut]);
@@ -40,12 +85,52 @@ export default function ProfileScreen() {
     return null;
   }
 
-  const userPosts = posts.filter((p) => p.userId === currentUser.id);
-  const userConnections = connections.filter(
-    (c) => c.userId === currentUser.id || c.connectedUserId === currentUser.id
-  );
+  const userPosts = [];
+  const userConnections = connections.filter((c: any) => c.status === 'accepted');
+  const totalLikes = 0;
 
-  const totalLikes = userPosts.reduce((sum, post) => sum + post.likes, 0);
+  const pickAvatar = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: [ImagePicker.MediaType.Images],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      setAvatarUri(result.assets[0].uri);
+    }
+  };
+
+  const saveProfile = useCallback(async () => {
+    if (!currentUser) return;
+    setSaving(true);
+    try {
+      let uploadedAvatar: string | undefined = avatarUri;
+      if (avatarUri && avatarUri !== currentUser.avatar) {
+        const uploaded = await uploadImage('avatars', avatarUri);
+        if (uploaded) {
+          uploadedAvatar = uploaded;
+        }
+      }
+
+      await updateUser({
+        name: name.trim(),
+        major: major.trim(),
+        year: year.trim(),
+        bio: bio.trim(),
+        interests: interests
+          .split(',')
+          .map((i) => i.trim())
+          .filter(Boolean),
+        avatar: uploadedAvatar,
+      });
+      setIsEditing(false);
+    } catch (err) {
+      Alert.alert('Error', 'Failed to save profile');
+    } finally {
+      setSaving(false);
+    }
+  }, [avatarUri, bio, currentUser, interests, major, name, updateUser, year]);
 
   return (
     <View style={styles.container}>
@@ -132,6 +217,92 @@ export default function ProfileScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      <Modal visible={isEditing} animationType="slide">
+        <KeyboardAvoidingView
+          style={styles.editContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.editHeader}>
+            <TouchableOpacity onPress={() => setIsEditing(false)}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={styles.editTitle}>Edit Profile</Text>
+            <TouchableOpacity onPress={saveProfile} disabled={saving} style={styles.saveButton}>
+              <Save size={18} color={saving ? Colors.light.placeholder : Colors.light.primary} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView contentContainerStyle={styles.editContent} showsVerticalScrollIndicator={false}>
+            <TouchableOpacity style={styles.editAvatarWrap} onPress={pickAvatar}>
+              <Image
+                source={{ uri: avatarUri || 'https://i.pravatar.cc/150?img=0' }}
+                style={styles.editAvatar}
+              />
+              <View style={styles.editAvatarOverlay}>
+                <ImageIcon size={18} color="#fff" />
+                <Text style={styles.editAvatarText}>Change photo</Text>
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.editField}>
+              <Text style={styles.editLabel}>Name</Text>
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                style={styles.editInput}
+                placeholder="Your name"
+                placeholderTextColor={Colors.light.placeholder}
+              />
+            </View>
+
+            <View style={styles.editField}>
+              <Text style={styles.editLabel}>Major</Text>
+              <TextInput
+                value={major}
+                onChangeText={setMajor}
+                style={styles.editInput}
+                placeholder="Major"
+                placeholderTextColor={Colors.light.placeholder}
+              />
+            </View>
+
+            <View style={styles.editField}>
+              <Text style={styles.editLabel}>Year</Text>
+              <TextInput
+                value={year}
+                onChangeText={setYear}
+                style={styles.editInput}
+                placeholder="Year"
+                placeholderTextColor={Colors.light.placeholder}
+              />
+            </View>
+
+            <View style={styles.editField}>
+              <Text style={styles.editLabel}>Bio</Text>
+              <TextInput
+                value={bio}
+                onChangeText={setBio}
+                style={[styles.editInput, styles.editTextarea]}
+                placeholder="Tell us about yourself"
+                placeholderTextColor={Colors.light.placeholder}
+                multiline
+              />
+            </View>
+
+            <View style={styles.editField}>
+              <Text style={styles.editLabel}>Interests (comma separated)</Text>
+              <TextInput
+                value={interests}
+                onChangeText={setInterests}
+                style={styles.editInput}
+                placeholder="e.g. AI, Web Dev, Gaming"
+                placeholderTextColor={Colors.light.placeholder}
+              />
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -149,6 +320,9 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     paddingHorizontal: 16,
+  },
+  editButton: {
+    paddingHorizontal: 8,
   },
   scrollContent: {
     paddingBottom: 24,
@@ -307,5 +481,81 @@ const styles = StyleSheet.create({
   joinedText: {
     fontSize: 13,
     color: Colors.light.textSecondary,
+  },
+  editContainer: {
+    flex: 1,
+    backgroundColor: Colors.light.background,
+  },
+  editHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 48,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.light.border,
+  },
+  cancelText: {
+    color: Colors.light.textSecondary,
+    fontWeight: '600' as const,
+  },
+  editTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: Colors.light.text,
+  },
+  saveButton: {
+    padding: 6,
+  },
+  editContent: {
+    padding: 20,
+    gap: 16,
+  },
+  editAvatarWrap: {
+    alignSelf: 'center',
+    position: 'relative',
+  },
+  editAvatar: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+  },
+  editAvatarOverlay: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  editAvatarText: {
+    color: '#fff',
+    fontWeight: '600' as const,
+    fontSize: 12,
+  },
+  editField: {
+    gap: 6,
+  },
+  editLabel: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.light.text,
+  },
+  editInput: {
+    backgroundColor: Colors.light.inputBackground,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: Colors.light.text,
+  },
+  editTextarea: {
+    minHeight: 100,
+    textAlignVertical: 'top',
   },
 });

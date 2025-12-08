@@ -9,9 +9,12 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
+  Alert,
+  Modal,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Heart, MessageCircle } from 'lucide-react-native';
+import { Heart, MessageCircle, MoreHorizontal } from 'lucide-react-native';
 
 import Colors from '@/constants/colors';
 import { trpc } from '@/lib/trpc';
@@ -23,6 +26,12 @@ export default function PostDetailScreen() {
   const router = useRouter();
   const { currentUser } = useAuth();
   const [commentText, setCommentText] = useState('');
+  const [postOptionsVisible, setPostOptionsVisible] = useState(false);
+  const [showEditPostModal, setShowEditPostModal] = useState(false);
+  const [editPostContent, setEditPostContent] = useState('');
+  const [commentOptions, setCommentOptions] = useState<{ id: string; content: string } | null>(null);
+  const [showEditCommentModal, setShowEditCommentModal] = useState(false);
+  const [editCommentContent, setEditCommentContent] = useState('');
 
   const utils = trpc.useUtils();
 
@@ -53,6 +62,38 @@ export default function PostDetailScreen() {
     },
   });
 
+  const updatePostMutation = trpc.posts.update.useMutation({
+    onSuccess: () => {
+      utils.posts.getById.invalidate({ id: postId || '' });
+      utils.posts.getInfinite.invalidate();
+      setShowEditPostModal(false);
+    },
+  });
+
+  const deletePostMutation = trpc.posts.delete.useMutation({
+    onSuccess: () => {
+      utils.posts.getInfinite.invalidate();
+      router.back();
+    },
+  });
+
+  const updateCommentMutation = trpc.posts.updateComment.useMutation({
+    onSuccess: () => {
+      utils.posts.getById.invalidate({ id: postId || '' });
+      utils.posts.getInfinite.invalidate();
+      setShowEditCommentModal(false);
+      setCommentOptions(null);
+    },
+  });
+
+  const deleteCommentMutation = trpc.posts.deleteComment.useMutation({
+    onSuccess: () => {
+      utils.posts.getById.invalidate({ id: postId || '' });
+      utils.posts.getInfinite.invalidate();
+      setCommentOptions(null);
+    },
+  });
+
   const handleToggleLike = () => {
     if (!post) return;
     toggleLikeMutation.mutate({ postId: post.id });
@@ -65,6 +106,56 @@ export default function PostDetailScreen() {
       content: commentText.trim(),
     });
   }, [post, commentText, addCommentMutation]);
+
+  const openPostOptions = () => {
+    if (!post || post.userId !== currentUser?.id) return;
+    setEditPostContent(post.content);
+    setPostOptionsVisible(true);
+    setShowEditPostModal(false);
+  };
+
+  const handleUpdatePost = () => {
+    if (!post || !editPostContent.trim()) return;
+    updatePostMutation.mutate({ postId: post.id, content: editPostContent.trim() });
+  };
+
+  const handleDeletePost = () => {
+    if (!post) return;
+    Alert.alert('Delete post?', 'This will remove the post and its comments.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => deletePostMutation.mutate({ postId: post.id }),
+      },
+    ]);
+  };
+
+  const openCommentOptions = (comment: { id: string; content: string; userId: string }) => {
+    if (comment.userId !== currentUser?.id) return;
+    setCommentOptions({ id: comment.id, content: comment.content });
+    setEditCommentContent(comment.content);
+  };
+
+  const handleUpdateComment = () => {
+    if (!commentOptions || !editCommentContent.trim()) return;
+    updateCommentMutation.mutate({
+      commentId: commentOptions.id,
+      content: editCommentContent.trim(),
+    });
+  };
+
+  const handleDeleteComment = () => {
+    if (!commentOptions) return;
+    Alert.alert('Delete comment?', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => deleteCommentMutation.mutate({ commentId: commentOptions.id }),
+      },
+    ]);
+  };
 
   if (!postId) {
     return (
@@ -108,6 +199,11 @@ export default function PostDetailScreen() {
             <Text style={styles.userName}>{post.userName}</Text>
             <Text style={styles.timeAgo}>{getTimeAgo(post.createdAt)}</Text>
           </View>
+          {currentUser?.id === post.userId && (
+            <TouchableOpacity onPress={openPostOptions} style={styles.moreButton}>
+              <MoreHorizontal size={20} color={Colors.light.textSecondary} />
+            </TouchableOpacity>
+          )}
         </View>
 
         <Text style={styles.postContent}>{post.content}</Text>
@@ -154,11 +250,182 @@ export default function PostDetailScreen() {
               <View style={styles.commentContent}>
                 <Text style={styles.commentUserName}>{comment.userName}</Text>
                 <Text style={styles.commentText}>{comment.content}</Text>
+                {comment.userId === currentUser?.id && (
+                  <TouchableOpacity
+                    style={styles.commentOptions}
+                    onPress={() => openCommentOptions(comment)}
+                  >
+                    <MoreHorizontal size={16} color={Colors.light.textSecondary} />
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           ))
         )}
       </View>
+
+      <Modal
+        visible={postOptionsVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPostOptionsVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.optionsOverlay}
+          activeOpacity={1}
+          onPress={() => setPostOptionsVisible(false)}
+        >
+          <View style={styles.optionsCard}>
+            <TouchableOpacity
+              style={styles.optionsItem}
+              onPress={() => {
+                setPostOptionsVisible(false);
+                setShowEditPostModal(true);
+              }}
+            >
+              <Text style={styles.optionsItemText}>Edit Post</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.optionsItem}
+              onPress={() => {
+                setPostOptionsVisible(false);
+                handleDeletePost();
+              }}
+            >
+              <Text style={styles.optionsItemDestructive}>Delete Post</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.optionsCancel} onPress={() => setPostOptionsVisible(false)}>
+              <Text style={styles.optionsCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={showEditPostModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowEditPostModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.optionsOverlay}
+        >
+          <View style={styles.editModalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Post</Text>
+              <TouchableOpacity onPress={() => setShowEditPostModal(false)}>
+                <Text style={styles.modalClose}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.postInput}
+              placeholder="Update your post..."
+              placeholderTextColor={Colors.light.placeholder}
+              value={editPostContent}
+              onChangeText={setEditPostContent}
+              multiline
+            />
+            <View style={styles.editModalActions}>
+              <TouchableOpacity
+                style={[
+                  styles.postButton,
+                  (!editPostContent.trim() || updatePostMutation.isPending) && styles.postButtonDisabled,
+                ]}
+                onPress={handleUpdatePost}
+                disabled={!editPostContent.trim() || updatePostMutation.isPending}
+              >
+                {updatePostMutation.isPending ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.postButtonText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        visible={!!commentOptions}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCommentOptions(null)}
+      >
+        <TouchableOpacity
+          style={styles.optionsOverlay}
+          activeOpacity={1}
+          onPress={() => setCommentOptions(null)}
+        >
+          <View style={styles.optionsCard}>
+            <TouchableOpacity
+              style={styles.optionsItem}
+              onPress={() => {
+                setShowEditCommentModal(true);
+                setCommentOptions((prev) => prev);
+              }}
+            >
+              <Text style={styles.optionsItemText}>Edit Comment</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.optionsItem}
+              onPress={() => {
+                handleDeleteComment();
+              }}
+            >
+              <Text style={styles.optionsItemDestructive}>Delete Comment</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.optionsCancel} onPress={() => setCommentOptions(null)}>
+              <Text style={styles.optionsCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={showEditCommentModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowEditCommentModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.optionsOverlay}
+        >
+          <View style={styles.editModalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Comment</Text>
+              <TouchableOpacity onPress={() => setShowEditCommentModal(false)}>
+                <Text style={styles.modalClose}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.postInput}
+              placeholder="Update your comment..."
+              placeholderTextColor={Colors.light.placeholder}
+              value={editCommentContent}
+              onChangeText={setEditCommentContent}
+              multiline
+            />
+            <View style={styles.editModalActions}>
+              <TouchableOpacity
+                style={[
+                  styles.postButton,
+                  (!editCommentContent.trim() || updateCommentMutation.isPending) && styles.postButtonDisabled,
+                ]}
+                onPress={handleUpdateComment}
+                disabled={!editCommentContent.trim() || updateCommentMutation.isPending}
+              >
+                {updateCommentMutation.isPending ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.postButtonText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <View style={styles.addCommentBar}>
         <TextInput
@@ -248,6 +515,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: Colors.light.text,
+  },
+  modalClose: {
+    fontSize: 16,
+    color: Colors.light.textSecondary,
+  },
   avatar: {
     width: 40,
     height: 40,
@@ -287,6 +569,32 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.light.border,
   },
+  postInput: {
+    backgroundColor: Colors.light.inputBackground,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: Colors.light.text,
+    minHeight: 120,
+    textAlignVertical: 'top',
+    marginBottom: 16,
+  },
+  postButton: {
+    backgroundColor: Colors.light.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    minWidth: 100,
+  },
+  postButtonDisabled: {
+    backgroundColor: Colors.light.border,
+  },
+  postButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600' as const,
+  },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -319,6 +627,7 @@ const styles = StyleSheet.create({
   comment: {
     flexDirection: 'row',
     gap: 8,
+    position: 'relative',
   },
   commentAvatar: {
     width: 32,
@@ -341,6 +650,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.light.text,
     lineHeight: 20,
+  },
+  commentOptions: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    padding: 4,
   },
   addCommentBar: {
     flexDirection: 'row',
@@ -369,6 +684,54 @@ const styles = StyleSheet.create({
   },
   commentSubmitDisabled: {
     color: Colors.light.placeholder,
+  },
+  moreButton: {
+    padding: 6,
+  },
+  optionsOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  optionsCard: {
+    backgroundColor: Colors.light.card,
+    padding: 16,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    gap: 8,
+  },
+  optionsItem: {
+    paddingVertical: 12,
+  },
+  optionsItemText: {
+    fontSize: 16,
+    color: Colors.light.text,
+    fontWeight: '600' as const,
+  },
+  optionsItemDestructive: {
+    fontSize: 16,
+    color: Colors.light.error,
+    fontWeight: '700' as const,
+  },
+  optionsCancel: {
+    paddingVertical: 12,
+  },
+  optionsCancelText: {
+    fontSize: 16,
+    color: Colors.light.textSecondary,
+    fontWeight: '600' as const,
+    textAlign: 'center',
+  },
+  editModalContent: {
+    backgroundColor: Colors.light.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+  },
+  editModalActions: {
+    marginTop: 8,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
   },
 });
 

@@ -8,11 +8,11 @@ export const postsRouter = createTRPCRouter({
       z.object({
         limit: z.number().min(1).max(100).default(10),
         cursor: z.string().nullish(),
-        category: z.enum(['all', 'clubs', 'events', 'study']).optional(),
+        search: z.string().optional(),
       })
     )
     .query(async ({ ctx, input }) => {
-      const { limit, cursor, category } = input;
+      const { limit, cursor } = input;
 
       let query = ctx.supabase
         .from('posts')
@@ -37,10 +37,6 @@ export const postsRouter = createTRPCRouter({
           )
         `)
         .order('created_at', { ascending: false });
-
-      if (category && category !== 'all') {
-        query = query.eq('category', category);
-      }
 
       if (cursor) {
         query = query.lt('created_at', cursor);
@@ -204,6 +200,94 @@ export const postsRouter = createTRPCRouter({
       return data;
     }),
 
+  update: protectedProcedure
+    .input(
+      z.object({
+        postId: z.string(),
+        content: z.string().min(1),
+        imageUrl: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { postId, content, imageUrl } = input;
+
+      const { data: post, error: fetchError } = await ctx.supabase
+        .from('posts')
+        .select('id, user_id')
+        .eq('id', postId)
+        .maybeSingle();
+
+      if (fetchError) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: fetchError.message,
+        });
+      }
+
+      if (!post || post.user_id !== ctx.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'You can only edit your own posts',
+        });
+      }
+
+      const { data, error } = await ctx.supabase
+        .from('posts')
+        .update({
+          content,
+          image_url: imageUrl ?? null,
+        })
+        .eq('id', postId)
+        .select()
+        .single();
+
+      if (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message,
+        });
+      }
+
+      return data;
+    }),
+
+  delete: protectedProcedure
+    .input(z.object({ postId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { postId } = input;
+
+      const { data: post, error: fetchError } = await ctx.supabase
+        .from('posts')
+        .select('id, user_id')
+        .eq('id', postId)
+        .maybeSingle();
+
+      if (fetchError) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: fetchError.message,
+        });
+      }
+
+      if (!post || post.user_id !== ctx.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'You can only delete your own posts',
+        });
+      }
+
+      const { error } = await ctx.supabase.from('posts').delete().eq('id', postId);
+
+      if (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message,
+        });
+      }
+
+      return { success: true };
+    }),
+
   toggleLike: protectedProcedure
     .input(z.object({ postId: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -299,6 +383,90 @@ export const postsRouter = createTRPCRouter({
         content: data.content,
         createdAt: data.created_at,
       };
+    }),
+
+  updateComment: protectedProcedure
+    .input(
+      z.object({
+        commentId: z.string(),
+        content: z.string().min(1),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { commentId, content } = input;
+
+      const { data: comment, error: fetchError } = await ctx.supabase
+        .from('comments')
+        .select('id, user_id')
+        .eq('id', commentId)
+        .maybeSingle();
+
+      if (fetchError) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: fetchError.message,
+        });
+      }
+
+      if (!comment || comment.user_id !== ctx.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'You can only edit your own comments',
+        });
+      }
+
+      const { data: updated, error } = await ctx.supabase
+        .from('comments')
+        .update({ content })
+        .eq('id', commentId)
+        .select()
+        .single();
+
+      if (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message,
+        });
+      }
+
+      return updated;
+    }),
+
+  deleteComment: protectedProcedure
+    .input(z.object({ commentId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { commentId } = input;
+
+      const { data: comment, error: fetchError } = await ctx.supabase
+        .from('comments')
+        .select('id, user_id')
+        .eq('id', commentId)
+        .maybeSingle();
+
+      if (fetchError) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: fetchError.message,
+        });
+      }
+
+      if (!comment || comment.user_id !== ctx.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'You can only delete your own comments',
+        });
+      }
+
+      const { error } = await ctx.supabase.from('comments').delete().eq('id', commentId);
+
+      if (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message,
+        });
+      }
+
+      return { success: true };
     }),
 });
 

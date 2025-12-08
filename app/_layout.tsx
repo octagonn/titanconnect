@@ -1,8 +1,10 @@
+import "react-native-gesture-handler";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthContext, useAuth } from "@/contexts/AuthContext";
 import { AppContext } from "@/contexts/AppContext";
 import Colors from "@/constants/colors";
@@ -98,8 +100,10 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <AuthContext>
           <AppContext>
-            <GestureHandlerRootView>
-              <RootLayoutNav />
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <SafeAreaProvider>
+                <RootLayoutNav />
+              </SafeAreaProvider>
             </GestureHandlerRootView>
           </AppContext>
         </AuthContext>

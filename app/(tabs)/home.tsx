@@ -1,5 +1,5 @@
-import { Heart, MessageCircle, Plus, Image as ImageIcon, X } from 'lucide-react-native';
-import { useState, useCallback } from 'react';
+import { Heart, MessageCircle, Plus, Image as ImageIcon, X, MoreHorizontal } from 'lucide-react-native';
+import { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,13 +13,16 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  ScrollView,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
-import { Post } from '@/types';
+import { Post, Comment } from '@/types';
 import { trpc } from '@/lib/trpc';
 import { uploadImage } from '@/lib/storage';
+import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 
 // Helper to show alerts safely on web
 const showAlert = (title: string, message: string) => {
@@ -30,17 +33,42 @@ const showAlert = (title: string, message: string) => {
   }
 };
 
-type FilterType = 'all' | 'clubs' | 'events' | 'study';
-
 export default function HomeScreen() {
   const { currentUser } = useAuth();
-  const [filter, setFilter] = useState<FilterType>('all');
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [showCreatePost, setShowCreatePost] = useState<boolean>(false);
   const [newPostContent, setNewPostContent] = useState<string>('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showComments, setShowComments] = useState<string | null>(null);
   const [commentText, setCommentText] = useState<string>('');
   const [isPosting, setIsPosting] = useState(false);
+  const [profileModalId, setProfileModalId] = useState<string | null>(null);
+  const reportsMutation = trpc.reports.reportUser.useMutation();
+  const [commentLikes, setCommentLikes] = useState<Record<string, number>>({});
+  const [commentLiked, setCommentLiked] = useState<Record<string, boolean>>({});
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [commentReplies, setCommentReplies] = useState<
+    Record<
+      string,
+      Array<{
+        id: string;
+        userId: string;
+        userName: string;
+        userAvatar?: string;
+        content: string;
+        createdAt: string;
+      }>
+    >
+  >({});
+  const [postOptionsId, setPostOptionsId] = useState<string | null>(null);
+  const [showEditPostModal, setShowEditPostModal] = useState(false);
+  const [editPostId, setEditPostId] = useState<string | null>(null);
+  const [editPostContent, setEditPostContent] = useState<string>('');
+  const [commentOptions, setCommentOptions] = useState<{ id: string; content: string } | null>(null);
+  const [showEditCommentModal, setShowEditCommentModal] = useState(false);
+  const [editCommentId, setEditCommentId] = useState<string | null>(null);
+  const [editCommentContent, setEditCommentContent] = useState<string>('');
 
   const utils = trpc.useUtils();
 
@@ -55,7 +83,7 @@ export default function HomeScreen() {
   } = trpc.posts.getInfinite.useInfiniteQuery(
     {
       limit: 10,
-      category: filter === 'all' ? undefined : filter,
+      search: searchQuery.trim() || undefined,
     },
     {
       getNextPageParam: (lastPage) => lastPage.nextCursor,
@@ -63,6 +91,16 @@ export default function HomeScreen() {
   );
 
   const posts = data?.pages.flatMap((page) => page.items) ?? [];
+
+  const filteredPosts = useMemo(() => {
+    if (!searchQuery.trim()) return posts;
+    const q = searchQuery.toLowerCase();
+    return posts.filter(
+      (p) =>
+        p.content.toLowerCase().includes(q) ||
+        p.userName.toLowerCase().includes(q)
+    );
+  }, [posts, searchQuery]);
 
   const createPostMutation = trpc.posts.create.useMutation({
     onSuccess: () => {
@@ -80,8 +118,40 @@ export default function HomeScreen() {
   });
 
   const toggleLikeMutation = trpc.posts.toggleLike.useMutation({
-    onSuccess: () => {
-      utils.posts.getInfinite.invalidate();
+    // Optimistic UI for smoother like experience
+    onMutate: async ({ postId }) => {
+      await utils.posts.getInfinite.cancel();
+      const input = { limit: 10, search: searchQuery.trim() || undefined };
+      const previous = utils.posts.getInfinite.getData(input);
+
+      utils.posts.getInfinite.setInfiniteData(input, (data) => {
+        if (!data) return data;
+        return {
+          pageParams: data.pageParams,
+          pages: data.pages.map((page) => ({
+            ...page,
+            items: page.items.map((p: Post) => {
+              if (p.id !== postId) return p;
+              const liked = p.likedBy.includes(currentUser?.id || '');
+              const nextLikedBy = liked
+                ? p.likedBy.filter((id) => id !== (currentUser?.id || ''))
+                : [...p.likedBy, currentUser?.id || ''];
+              return {
+                ...p,
+                likedBy: nextLikedBy,
+                likes: liked ? Math.max(0, p.likes - 1) : p.likes + 1,
+              };
+            }),
+          })),
+        };
+      });
+
+      return { previous, input };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        utils.posts.getInfinite.setInfiniteData(context.input, context.previous);
+      }
     },
   });
 
@@ -89,6 +159,39 @@ export default function HomeScreen() {
     onSuccess: () => {
       utils.posts.getInfinite.invalidate();
       setCommentText('');
+    },
+  });
+
+  const updatePostMutation = trpc.posts.update.useMutation({
+    onSuccess: () => {
+      utils.posts.getInfinite.invalidate();
+      setShowEditPostModal(false);
+      setEditPostId(null);
+      setEditPostContent('');
+    },
+  });
+
+  const deletePostMutation = trpc.posts.delete.useMutation({
+    onSuccess: () => {
+      utils.posts.getInfinite.invalidate();
+      setPostOptionsId(null);
+      setShowComments(null);
+    },
+  });
+
+  const updateCommentMutation = trpc.posts.updateComment.useMutation({
+    onSuccess: () => {
+      utils.posts.getInfinite.invalidate();
+      setShowEditCommentModal(false);
+      setEditCommentId(null);
+      setEditCommentContent('');
+    },
+  });
+
+  const deleteCommentMutation = trpc.posts.deleteComment.useMutation({
+    onSuccess: () => {
+      utils.posts.getInfinite.invalidate();
+      setCommentOptions(null);
     },
   });
 
@@ -128,7 +231,7 @@ export default function HomeScreen() {
       console.log('Mutating createPost...');
       await createPostMutation.mutateAsync({
         content: newPostContent.trim(),
-        category: filter === 'all' ? 'all' : filter,
+        category: 'all',
         imageUrl,
       });
     } catch (error) {
@@ -139,6 +242,46 @@ export default function HomeScreen() {
 
   const handleToggleLike = (postId: string) => {
     toggleLikeMutation.mutate({ postId });
+    Haptics.selectionAsync();
+  };
+
+  const handleLikeComment = (commentId: string) => {
+    setCommentLiked((prev) => {
+      const nextLiked = !prev[commentId];
+      setCommentLikes((likes) => ({
+        ...likes,
+        [commentId]: (likes[commentId] || 0) + (nextLiked ? 1 : -1),
+      }));
+      Haptics.selectionAsync();
+      return { ...prev, [commentId]: nextLiked };
+    });
+  };
+
+  const handleReplyChange = (commentId: string, text: string) => {
+    setReplyDrafts((prev) => ({ ...prev, [commentId]: text }));
+  };
+
+  const handleSubmitReply = (commentId: string) => {
+    const text = replyDrafts[commentId]?.trim();
+    if (!text || !currentUser) return;
+    const newReply = {
+      id: `r-${Date.now()}`,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userAvatar: currentUser.avatar,
+      content: text,
+      createdAt: new Date().toISOString(),
+    };
+    setCommentReplies((prev) => ({
+      ...prev,
+      [commentId]: [...(prev[commentId] || []), newReply],
+    }));
+    setReplyDrafts((prev) => ({ ...prev, [commentId]: '' }));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const getCommentLikes = (commentId: string, base = 0) => {
+    return base + (commentLikes[commentId] || 0);
   };
 
   const handleAddComment = useCallback(
@@ -149,6 +292,55 @@ export default function HomeScreen() {
     },
     [commentText, addCommentMutation]
   );
+
+  const openPostOptions = (post: Post) => {
+    if (post.userId !== currentUser?.id) return;
+    setPostOptionsId(post.id);
+    setEditPostId(post.id);
+    setEditPostContent(post.content);
+  };
+
+  const handleUpdatePost = () => {
+    if (!editPostId || !editPostContent.trim()) return;
+    updatePostMutation.mutate({ postId: editPostId, content: editPostContent.trim() });
+  };
+
+  const handleDeletePost = (postId: string) => {
+    Alert.alert('Delete post?', 'This will remove the post and its comments.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => deletePostMutation.mutate({ postId }),
+      },
+    ]);
+  };
+
+  const openCommentOptions = (comment: Comment) => {
+    if (comment.userId !== currentUser?.id) return;
+    setCommentOptions({ id: comment.id, content: comment.content });
+    setEditCommentId(comment.id);
+    setEditCommentContent(comment.content);
+  };
+
+  const handleUpdateComment = () => {
+    if (!editCommentId || !editCommentContent.trim()) return;
+    updateCommentMutation.mutate({
+      commentId: editCommentId,
+      content: editCommentContent.trim(),
+    });
+  };
+
+  const handleDeleteComment = (commentId: string) => {
+    Alert.alert('Delete comment?', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => deleteCommentMutation.mutate({ commentId }),
+      },
+    ]);
+  };
 
   const renderPost = useCallback(
     ({ item }: { item: Post }) => {
@@ -162,14 +354,39 @@ export default function HomeScreen() {
       return (
         <View style={styles.postCard}>
           <View style={styles.postHeader}>
-            <Image
-              source={{ uri: item.userAvatar || 'https://i.pravatar.cc/150?img=0' }}
-              style={styles.avatar}
-            />
-            <View style={styles.postHeaderText}>
+            <TouchableOpacity
+              onPress={() => {
+                if (item.userId === currentUser?.id) {
+                  router.push('/(tabs)/profile');
+                } else {
+                  setProfileModalId(item.userId);
+                }
+              }}
+              style={styles.avatarWrap}
+            >
+              <Image
+                source={{ uri: item.userAvatar || 'https://i.pravatar.cc/150?img=0' }}
+                style={styles.avatar}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                if (item.userId === currentUser?.id) {
+                  router.push('/(tabs)/profile');
+                } else {
+                  setProfileModalId(item.userId);
+                }
+              }}
+              style={styles.postHeaderText}
+            >
               <Text style={styles.userName}>{item.userName}</Text>
               <Text style={styles.timeAgo}>{getTimeAgo(item.createdAt)}</Text>
-            </View>
+            </TouchableOpacity>
+            {currentUser?.id === item.userId && (
+              <TouchableOpacity onPress={() => openPostOptions(item)} style={styles.moreButton}>
+                <MoreHorizontal size={20} color={Colors.light.textSecondary} />
+              </TouchableOpacity>
+            )}
           </View>
 
           <Text style={styles.postContent}>{item.content}</Text>
@@ -206,18 +423,117 @@ export default function HomeScreen() {
 
           {showingComments && (
             <View style={styles.commentsSection}>
-              {item.comments.map((comment) => (
-                <View key={comment.id} style={styles.comment}>
-                  <Image
-                    source={{ uri: comment.userAvatar || 'https://i.pravatar.cc/150?img=0' }}
-                    style={styles.commentAvatar}
-                  />
-                  <View style={styles.commentContent}>
-                    <Text style={styles.commentUserName}>{comment.userName}</Text>
-                    <Text style={styles.commentText}>{comment.content}</Text>
-                  </View>
-                </View>
-              ))}
+              {[...item.comments]
+                .sort((a, b) => {
+                  const likeA = getCommentLikes(a.id, 0);
+                  const likeB = getCommentLikes(b.id, 0);
+                  if (likeA !== likeB) return likeB - likeA;
+                  return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+                })
+                .map((comment) => {
+                  const replies = commentReplies[comment.id] || [];
+                  return (
+                    <View key={comment.id} style={styles.comment}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          if (comment.userId === currentUser?.id) {
+                            router.push('/(tabs)/profile');
+                          } else {
+                            setProfileModalId(comment.userId);
+                          }
+                        }}
+                      >
+                        <Image
+                          source={{ uri: comment.userAvatar || 'https://i.pravatar.cc/150?img=0' }}
+                          style={styles.commentAvatar}
+                        />
+                      </TouchableOpacity>
+                      <View style={styles.commentContent}>
+                        <TouchableOpacity
+                          onPress={() => {
+                            if (comment.userId === currentUser?.id) {
+                              router.push('/(tabs)/profile');
+                            } else {
+                              setProfileModalId(comment.userId);
+                            }
+                          }}
+                        >
+                          <Text style={styles.commentUserName}>{comment.userName}</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.commentText}>{comment.content}</Text>
+                        {comment.userId === currentUser?.id && (
+                          <TouchableOpacity
+                            style={styles.commentOptions}
+                            onPress={() => openCommentOptions(comment)}
+                          >
+                            <MoreHorizontal size={16} color={Colors.light.textSecondary} />
+                          </TouchableOpacity>
+                        )}
+                        <View style={styles.commentActionsRow}>
+                          <TouchableOpacity
+                            onPress={() => handleLikeComment(comment.id)}
+                            style={styles.commentAction}
+                          >
+                            <Text style={styles.commentActionText}>
+                              {getCommentLikes(comment.id, 0)} Likes
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() =>
+                              setReplyDrafts((prev) => ({
+                                ...prev,
+                                [comment.id]: prev[comment.id] ?? '',
+                              }))
+                            }
+                            style={styles.commentAction}
+                          >
+                            <Text style={styles.commentActionText}>Reply</Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        {replies.length > 0 && (
+                          <View style={styles.repliesContainer}>
+                            {replies
+                              .sort(
+                                (a, b) =>
+                                  new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+                              )
+                              .map((reply) => (
+                                <View key={reply.id} style={styles.replyRow}>
+                                  <Image
+                                    source={{ uri: reply.userAvatar || 'https://i.pravatar.cc/150?img=0' }}
+                                    style={styles.replyAvatar}
+                                  />
+                                  <View style={styles.replyContent}>
+                                    <Text style={styles.replyAuthor}>{reply.userName}</Text>
+                                    <Text style={styles.replyText}>{reply.content}</Text>
+                                  </View>
+                                </View>
+                              ))}
+                          </View>
+                        )}
+
+                        {replyDrafts[comment.id] !== undefined && (
+                          <View style={styles.replyInputRow}>
+                            <TextInput
+                              style={styles.replyInput}
+                              placeholder="Write a reply..."
+                              placeholderTextColor={Colors.light.placeholder}
+                              value={replyDrafts[comment.id]}
+                              onChangeText={(text) => handleReplyChange(comment.id, text)}
+                            />
+                            <TouchableOpacity
+                              onPress={() => handleSubmitReply(comment.id)}
+                              style={styles.replySend}
+                            >
+                              <Text style={styles.replySendText}>Send</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
 
               <View style={styles.addComment}>
                 <TextInput
@@ -248,24 +564,104 @@ export default function HomeScreen() {
         </View>
       );
     },
-    [currentUser, showComments, commentText, handleToggleLike, handleAddComment, addCommentMutation.isPending]
+    [
+      currentUser,
+      showComments,
+      commentText,
+      handleToggleLike,
+      handleAddComment,
+      addCommentMutation.isPending,
+      commentReplies,
+      replyDrafts,
+      handleReplyChange,
+      handleSubmitReply,
+      openPostOptions,
+      openCommentOptions,
+      getCommentLikes,
+      handleLikeComment,
+    ]
   );
+
+  const closeProfileModal = () => setProfileModalId(null);
+
+  const profileQuery = trpc.profiles.getById.useQuery(
+    { userId: profileModalId || '' },
+    { enabled: !!profileModalId }
+  );
+
+  const sendRequest = trpc.connections.sendRequest.useMutation({
+    onSuccess: () => profileQuery.refetch(),
+  });
+
+  const respond = trpc.connections.respond.useMutation({
+    onSuccess: () => profileQuery.refetch(),
+  });
+
+  const removeConnection = trpc.connections.remove.useMutation({
+    onSuccess: () => profileQuery.refetch(),
+  });
+
+  const upsertConversation = trpc.messages.upsertConversation.useMutation({
+    onSuccess: (conv) => {
+      closeProfileModal();
+      router.push(`/chat/${conv.id}` as any);
+    },
+  });
+
+  const handleFriendAction = useCallback(() => {
+    if (!profileQuery.data) return;
+    const { relationship, connectionId, id } = profileQuery.data;
+    if (relationship === 'none') {
+      sendRequest.mutate({ targetUserId: id });
+      return;
+    }
+    if (relationship === 'incoming' && connectionId) {
+      respond.mutate({ connectionId, action: 'accept' });
+      return;
+    }
+    if (relationship === 'pending') {
+      removeConnection.mutate({ targetUserId: id });
+      return;
+    }
+  }, [profileQuery.data, sendRequest, respond, removeConnection]);
+
+  const friendButtonLabel = useMemo(() => {
+    if (!profileQuery.data) return 'Add Friend';
+    switch (profileQuery.data.relationship) {
+      case 'accepted':
+        return 'Friends';
+      case 'pending':
+        return 'Cancel Request';
+      case 'incoming':
+        return 'Accept Request';
+      case 'blocked':
+        return 'Blocked';
+      default:
+        return 'Add Friend';
+    }
+  }, [profileQuery.data]);
+
+  const friendButtonDisabled = useMemo(() => {
+    if (!profileQuery.data) return false;
+    return profileQuery.data.relationship === 'accepted' || profileQuery.data.relationship === 'blocked';
+  }, [profileQuery.data]);
 
   return (
     <View style={styles.container}>
-      <View style={styles.filterContainer}>
-        {(['all', 'clubs', 'events', 'study'] as FilterType[]).map((f) => (
-          <TouchableOpacity
-            key={f}
-            style={[styles.filterButton, filter === f && styles.filterButtonActive]}
-            onPress={() => setFilter(f)}
-            testID={`filter-${f}`}
-          >
-            <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
-              {f.charAt(0).toUpperCase() + f.slice(1)}
-            </Text>
+      <View style={styles.searchBar}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search posts or people..."
+          placeholderTextColor={Colors.light.placeholder}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          returnKeyType="search"
+        />
+        {searchQuery.trim().length > 0 && (
+          <TouchableOpacity style={styles.cancelSearch} onPress={() => setSearchQuery('')}>
+            <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
-        ))}
+        )}
       </View>
 
       {isLoading ? (
@@ -274,7 +670,7 @@ export default function HomeScreen() {
         </View>
       ) : (
         <FlatList
-          data={posts}
+          data={filteredPosts}
           renderItem={renderPost}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
@@ -301,6 +697,74 @@ export default function HomeScreen() {
       >
         <Plus size={24} color="#ffffff" />
       </TouchableOpacity>
+
+      <Modal
+        visible={!!postOptionsId}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPostOptionsId(null)}
+      >
+        <TouchableOpacity style={styles.optionsOverlay} activeOpacity={1} onPress={() => setPostOptionsId(null)}>
+          <View style={styles.optionsCard}>
+            <TouchableOpacity
+              style={styles.optionsItem}
+              onPress={() => {
+                setPostOptionsId(null);
+                setShowEditPostModal(true);
+              }}
+            >
+              <Text style={styles.optionsItemText}>Edit Post</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.optionsItem}
+              onPress={() => {
+                const id = postOptionsId;
+                setPostOptionsId(null);
+                if (id) handleDeletePost(id);
+              }}
+            >
+              <Text style={styles.optionsItemDestructive}>Delete Post</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.optionsCancel} onPress={() => setPostOptionsId(null)}>
+              <Text style={styles.optionsCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={!!commentOptions}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCommentOptions(null)}
+      >
+        <TouchableOpacity style={styles.optionsOverlay} activeOpacity={1} onPress={() => setCommentOptions(null)}>
+          <View style={styles.optionsCard}>
+            <TouchableOpacity
+              style={styles.optionsItem}
+              onPress={() => {
+                setShowEditCommentModal(true);
+                setCommentOptions(null);
+              }}
+            >
+              <Text style={styles.optionsItemText}>Edit Comment</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.optionsItem}
+              onPress={() => {
+                const id = commentOptions?.id;
+                setCommentOptions(null);
+                if (id) handleDeleteComment(id);
+              }}
+            >
+              <Text style={styles.optionsItemDestructive}>Delete Comment</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.optionsCancel} onPress={() => setCommentOptions(null)}>
+              <Text style={styles.optionsCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <Modal
         visible={showCreatePost}
@@ -367,6 +831,221 @@ export default function HomeScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <Modal
+        visible={showEditPostModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => {
+          setShowEditPostModal(false);
+          setEditPostId(null);
+        }}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalContainer}
+        >
+          <View style={styles.editModalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Post</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowEditPostModal(false);
+                  setEditPostId(null);
+                }}
+              >
+                <Text style={styles.modalClose}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.postInput}
+              placeholder="Update your post..."
+              placeholderTextColor={Colors.light.placeholder}
+              value={editPostContent}
+              onChangeText={setEditPostContent}
+              multiline
+            />
+            <View style={styles.editModalActions}>
+              <TouchableOpacity
+                style={[
+                  styles.postButton,
+                  (!editPostContent.trim() || updatePostMutation.isPending) && styles.postButtonDisabled,
+                ]}
+                onPress={handleUpdatePost}
+                disabled={!editPostContent.trim() || updatePostMutation.isPending}
+              >
+                {updatePostMutation.isPending ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.postButtonText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        visible={showEditCommentModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => {
+          setShowEditCommentModal(false);
+          setEditCommentId(null);
+        }}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalContainer}
+        >
+          <View style={styles.editModalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Comment</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowEditCommentModal(false);
+                  setEditCommentId(null);
+                }}
+              >
+                <Text style={styles.modalClose}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.postInput}
+              placeholder="Update your comment..."
+              placeholderTextColor={Colors.light.placeholder}
+              value={editCommentContent}
+              onChangeText={setEditCommentContent}
+              multiline
+            />
+            <View style={styles.editModalActions}>
+              <TouchableOpacity
+                style={[
+                  styles.postButton,
+                  (!editCommentContent.trim() || updateCommentMutation.isPending) && styles.postButtonDisabled,
+                ]}
+                onPress={handleUpdateComment}
+                disabled={!editCommentContent.trim() || updateCommentMutation.isPending}
+              >
+                {updateCommentMutation.isPending ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.postButtonText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={!!profileModalId} animationType="slide" presentationStyle="fullScreen">
+        <View style={styles.profileModalContainer}>
+          <View style={styles.profileModalHeader}>
+            <TouchableOpacity onPress={closeProfileModal}>
+              <Text style={styles.modalCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+          {profileQuery.isLoading || !profileQuery.data ? (
+            <View style={styles.profileModalLoading}>
+              <ActivityIndicator size="large" color={Colors.light.primary} />
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={styles.profileModalContent} showsVerticalScrollIndicator={false}>
+              <View style={styles.profileHeader}>
+                <Image
+                  source={{ uri: profileQuery.data.avatar || 'https://i.pravatar.cc/150?img=0' }}
+                  style={styles.profileAvatar}
+                />
+                <Text style={styles.profileName}>{profileQuery.data.name}</Text>
+                {profileQuery.data.major ? <Text style={styles.profileMajor}>{profileQuery.data.major}</Text> : null}
+                {profileQuery.data.year ? (
+                  <View style={styles.profilePill}>
+                    <Text style={styles.profilePillText}>{profileQuery.data.year}</Text>
+                  </View>
+                ) : null}
+                <View style={styles.profileActions}>
+                  <TouchableOpacity
+                    style={[
+                      styles.profileButton,
+                      friendButtonDisabled ? styles.profileButtonDisabled : styles.profilePrimary,
+                    ]}
+                    disabled={friendButtonDisabled || sendRequest.isPending || respond.isPending || removeConnection.isPending}
+                    onPress={handleFriendAction}
+                  >
+                    <Text style={styles.profileButtonText}>{friendButtonLabel}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.profileButton, styles.profileSecondary]}
+                    onPress={() => upsertConversation.mutate({ otherUserId: profileQuery.data.id })}
+                  >
+                    <Text style={[styles.profileButtonText, styles.profileSecondaryText]}>Message</Text>
+                  </TouchableOpacity>
+                  {profileQuery.data.relationship === 'pending' && (
+                    <TouchableOpacity
+                      style={[styles.profileButton, styles.profileSecondary]}
+                      onPress={() => removeConnection.mutate({ targetUserId: profileQuery.data.id })}
+                      disabled={removeConnection.isPending}
+                    >
+                      <Text style={[styles.profileButtonText, styles.profileSecondaryText]}>Cancel Request</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+
+              {profileQuery.data.bio ? (
+                <View style={styles.profileSection}>
+                  <Text style={styles.profileSectionTitle}>About</Text>
+                  <Text style={styles.profileBody}>{profileQuery.data.bio}</Text>
+                </View>
+              ) : null}
+
+              <View style={styles.profileSection}>
+                <Text style={styles.profileSectionTitle}>Details</Text>
+                {profileQuery.data.major ? (
+                  <Text style={styles.profileDetail}>Major: {profileQuery.data.major}</Text>
+                ) : null}
+                {profileQuery.data.year ? <Text style={styles.profileDetail}>Year: {profileQuery.data.year}</Text> : null}
+                {profileQuery.data.createdAt ? (
+                  <Text style={styles.profileDetail}>
+                    Joined: {new Date(profileQuery.data.createdAt).toLocaleDateString()}
+                  </Text>
+                ) : null}
+              </View>
+
+              {profileQuery.data.interests?.length ? (
+                <View style={styles.profileSection}>
+                  <Text style={styles.profileSectionTitle}>Interests</Text>
+                  <View style={styles.profileChips}>
+                    {profileQuery.data.interests.map((interest: string) => (
+                      <View key={interest} style={styles.profileChip}>
+                        <Text style={styles.profileChipText}>{interest}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
+              <TouchableOpacity
+                style={[styles.profileButton, styles.reportButton]}
+                onPress={async () => {
+                  try {
+                    await reportsMutation.mutateAsync({ userId: profileQuery.data.id });
+                    Alert.alert('Report submitted', 'Thank you. We will review.');
+                  } catch (err: any) {
+                    const msg =
+                      err?.message?.includes('cooldown') || err?.data?.code === 'TOO_MANY_REQUESTS'
+                        ? 'You have recently reported this user. Please wait before reporting again.'
+                        : 'Could not submit report.';
+                    Alert.alert('Report', msg);
+                  }
+                }}
+              >
+                <Text style={[styles.profileButtonText, styles.reportText]}>Report User</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -400,34 +1079,36 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.light.textSecondary,
   },
-  filterContainer: {
-    flexDirection: 'row',
+  searchBar: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     backgroundColor: Colors.light.background,
     borderBottomWidth: 1,
     borderBottomColor: Colors.light.border,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.light.backgroundSecondary,
-  },
-  filterButtonActive: {
-    backgroundColor: Colors.light.primary,
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: '500' as const,
+  searchInput: {
+    backgroundColor: Colors.light.inputBackground,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
     color: Colors.light.text,
+    flex: 1,
   },
-  filterTextActive: {
-    color: '#ffffff',
+  cancelSearch: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  cancelText: {
+    color: Colors.light.primary,
+    fontWeight: '700' as const,
   },
   listContent: {
     padding: 16,
+    paddingBottom: 100,
     gap: 12,
   },
   postCard: {
@@ -445,11 +1126,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+  avatarWrap: {
+    marginRight: 12,
+  },
   avatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    marginRight: 12,
   },
   postHeaderText: {
     flex: 1,
@@ -507,6 +1190,7 @@ const styles = StyleSheet.create({
   comment: {
     flexDirection: 'row',
     gap: 8,
+    position: 'relative',
   },
   commentAvatar: {
     width: 32,
@@ -529,6 +1213,75 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.light.text,
     lineHeight: 20,
+  },
+  commentActionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 6,
+  },
+  commentAction: {
+    paddingVertical: 4,
+  },
+  commentActionText: {
+    fontSize: 13,
+    color: Colors.light.textSecondary,
+    fontWeight: '600' as const,
+  },
+  repliesContainer: {
+    marginTop: 8,
+    gap: 8,
+  },
+  replyRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'flex-start',
+  },
+  replyAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  replyContent: {
+    flex: 1,
+    backgroundColor: Colors.light.backgroundSecondary,
+    borderRadius: 10,
+    padding: 10,
+  },
+  replyAuthor: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: Colors.light.text,
+  },
+  replyText: {
+    fontSize: 13,
+    color: Colors.light.text,
+    marginTop: 2,
+  },
+  replyInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  replyInput: {
+    flex: 1,
+    backgroundColor: Colors.light.inputBackground,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    color: Colors.light.text,
+    fontSize: 13,
+  },
+  replySend: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: Colors.light.primary,
+    borderRadius: 8,
+  },
+  replySendText: {
+    color: '#fff',
+    fontWeight: '700' as const,
+    fontSize: 13,
   },
   addComment: {
     flexDirection: 'row',
@@ -554,7 +1307,7 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: 'absolute',
-    bottom: 24,
+    bottom: 100,
     right: 24,
     width: 56,
     height: 56,
@@ -567,6 +1320,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
+    zIndex: 1,
   },
   modalContainer: {
     flex: 1,
@@ -649,5 +1403,182 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     borderRadius: 12,
     padding: 4,
+  },
+  profileModalContainer: {
+    flex: 1,
+    backgroundColor: Colors.light.background,
+  },
+  profileModalHeader: {
+    paddingTop: 48,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.light.border,
+  },
+  modalCloseText: {
+    color: Colors.light.primary,
+    fontWeight: '700' as const,
+    fontSize: 16,
+  },
+  profileModalLoading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileModalContent: {
+    padding: 20,
+    gap: 16,
+  },
+  profileHeader: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  profileAvatar: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    marginBottom: 8,
+  },
+  profileName: {
+    fontSize: 24,
+    fontWeight: '700' as const,
+    color: Colors.light.text,
+  },
+  profileMajor: {
+    fontSize: 15,
+    color: Colors.light.textSecondary,
+  },
+  profilePill: {
+    marginTop: 6,
+    backgroundColor: Colors.light.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  profilePillText: {
+    color: '#fff',
+    fontWeight: '700' as const,
+  },
+  profileActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+  },
+  profileButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  profilePrimary: {
+    backgroundColor: Colors.light.primary,
+  },
+  profileButtonDisabled: {
+    backgroundColor: Colors.light.border,
+  },
+  profileSecondary: {
+    backgroundColor: Colors.light.border,
+  },
+  profileButtonText: {
+    color: '#fff',
+    fontWeight: '700' as const,
+  },
+  profileSecondaryText: {
+    color: Colors.light.text,
+  },
+  profileSection: {
+    gap: 8,
+  },
+  profileSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: Colors.light.text,
+  },
+  profileBody: {
+    fontSize: 15,
+    color: Colors.light.text,
+    lineHeight: 22,
+  },
+  profileChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  profileChip: {
+    backgroundColor: Colors.light.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  profileChipText: {
+    color: '#fff',
+    fontWeight: '600' as const,
+  },
+  profileDetail: {
+    fontSize: 14,
+    color: Colors.light.text,
+    marginBottom: 4,
+  },
+  reportButton: {
+    backgroundColor: Colors.light.error,
+    alignSelf: 'center',
+    marginTop: 8,
+    paddingHorizontal: 18,
+  },
+  reportText: {
+    color: '#fff',
+  },
+  moreButton: {
+    padding: 6,
+  },
+  commentOptions: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    padding: 4,
+  },
+  optionsOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  optionsCard: {
+    backgroundColor: Colors.light.card,
+    padding: 16,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    gap: 8,
+  },
+  optionsItem: {
+    paddingVertical: 12,
+  },
+  optionsItemText: {
+    fontSize: 16,
+    color: Colors.light.text,
+    fontWeight: '600' as const,
+  },
+  optionsItemDestructive: {
+    fontSize: 16,
+    color: Colors.light.error,
+    fontWeight: '700' as const,
+  },
+  optionsCancel: {
+    paddingVertical: 12,
+  },
+  optionsCancelText: {
+    fontSize: 16,
+    color: Colors.light.textSecondary,
+    fontWeight: '600' as const,
+    textAlign: 'center',
+  },
+  editModalContent: {
+    backgroundColor: Colors.light.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+  },
+  editModalActions: {
+    marginTop: 8,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
   },
 });

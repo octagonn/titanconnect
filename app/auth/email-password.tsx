@@ -1,5 +1,5 @@
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -44,9 +44,10 @@ export default function EmailPasswordAuthScreen() {
 
   const [email] = useState<string>(initialEmail);
   const [password, setPassword] = useState<string>('');
+  const [mode, setMode] = useState<'signup' | 'signin'>('signup');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  const handleContinue = async () => {
+  const handleSubmit = useCallback(async () => {
     if (!email) {
       Alert.alert('Email required', 'Please go back and enter your email.');
       return;
@@ -59,12 +60,11 @@ export default function EmailPasswordAuthScreen() {
     setIsSubmitting(true);
 
     try {
-      // 1) Try to sign in first
-      try {
+      if (mode === 'signin') {
         const result = await signInWithEmailAndPassword(email, password);
 
         if (result.success) {
-          // Email is verified; the root layout + auth context will navigate appropriately
+          // Root layout + auth context will navigate appropriately
           return;
         }
 
@@ -75,13 +75,16 @@ export default function EmailPasswordAuthScreen() {
           });
           return;
         }
-      } catch (error) {
-        // Any sign-in error (invalid credentials, user not found, etc.)
-        // will fall through to sign-up logic below.
-        console.log('Sign-in failed, attempting sign-up instead:', error);
+
+        if (result.invalidCredentials) {
+          Alert.alert('Incorrect email or password', 'Double-check your credentials and try again.');
+          return;
+        }
+
+        Alert.alert('Sign in failed', 'Check your email/password or verify your email.');
+        return;
       }
 
-      // 2) If sign-in failed (e.g. new user), try to sign up
       const signupResult = await signUpWithEmailAndPassword(email, password, role);
 
       if (signupResult.success) {
@@ -100,15 +103,30 @@ export default function EmailPasswordAuthScreen() {
         return;
       }
 
-      // If we get here, something unexpected happened
       Alert.alert('Something went wrong', 'Please try again or come back later.');
     } catch (error) {
       console.error('Error in email/password auth flow:', error);
+
+      const message = typeof error === 'object' && error && 'message' in error
+        ? String((error as Error).message).toLowerCase()
+        : '';
+
+      if (
+        mode === 'signin' &&
+        (message.includes('invalid login') ||
+          message.includes('invalid email or password') ||
+          message.includes('invalid credentials') ||
+          message.includes('invalid password'))
+      ) {
+        Alert.alert('Incorrect email or password', 'Double-check your credentials and try again.');
+        return;
+      }
+
       Alert.alert('Something went wrong', 'Please try again or come back later.');
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [email, password, mode, role, router, signInWithEmailAndPassword, signUpWithEmailAndPassword]);
 
   return (
     <KeyboardAvoidingView
@@ -125,10 +143,12 @@ export default function EmailPasswordAuthScreen() {
       >
         <View style={styles.card}>
           <Text style={styles.heading}>
-            {role === 'faculty' ? 'Faculty Sign In' : 'Sign In or Create Account'}
+            {mode === 'signup' ? 'Create your account' : 'Welcome back'}
           </Text>
           <Text style={styles.subheading}>
-            Enter a password to {role === 'faculty' ? 'access your faculty account.' : 'sign in or create your TitanConnect account.'}
+            {mode === 'signup'
+              ? 'Set a password to finish creating your TitanConnect account.'
+              : 'Sign in with your email and password to continue.'}
           </Text>
 
           <View style={styles.field}>
@@ -145,7 +165,7 @@ export default function EmailPasswordAuthScreen() {
             <Text style={styles.label}>Password</Text>
             <TextInput
               style={styles.input}
-              placeholder="Enter a secure password"
+              placeholder={mode === 'signup' ? 'Create a secure password' : 'Enter your password'}
               placeholderTextColor={Colors.light.placeholder}
               value={password}
               onChangeText={setPassword}
@@ -155,24 +175,41 @@ export default function EmailPasswordAuthScreen() {
               textContentType="password"
             />
             <Text style={styles.helperText}>
-              At least 8 characters. You’ll use this password next time you sign in.
+              At least 8 characters. {mode === 'signup'
+                ? 'You’ll use this password next time you sign in.'
+                : 'Use the password you created when signing up.'}
             </Text>
           </View>
 
           <TouchableOpacity
             style={[styles.button, (!password || isSubmitting) && styles.buttonDisabled]}
-            onPress={handleContinue}
+            onPress={handleSubmit}
             disabled={!password || isSubmitting}
             activeOpacity={0.85}
           >
             <Text style={styles.buttonText}>
-              {isSubmitting ? 'Please wait…' : 'Continue'}
+              {isSubmitting ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Sign in'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.secondaryButton,
+              isSubmitting && styles.secondaryButtonDisabled,
+            ]}
+            onPress={() => setMode((prev) => (prev === 'signup' ? 'signin' : 'signup'))}
+            activeOpacity={0.85}
+            disabled={isSubmitting}
+          >
+            <Text style={styles.secondaryButtonText}>
+              {mode === 'signup' ? 'Already have an account? Sign in' : 'New here? Create an account'}
             </Text>
           </TouchableOpacity>
 
           <Text style={styles.footerText}>
-            If this email is new, we’ll create an account and send a verification email. If it already
-            exists, we’ll sign you in after verification.
+            {mode === 'signup'
+              ? 'We’ll send a verification email to finish creating your account.'
+              : 'Need help? Make sure your email is verified before signing in.'}
           </Text>
         </View>
       </View>
@@ -272,6 +309,38 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 12,
     color: Colors.light.textSecondary,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  switchText: {
+    fontSize: 13,
+    color: Colors.light.textSecondary,
+  },
+  switchButton: {
+    fontSize: 13,
+    color: Colors.light.primary,
+    fontWeight: '700' as const,
+    marginLeft: 6,
+  },
+  secondaryButton: {
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  secondaryButtonDisabled: {
+    opacity: 0.6,
+  },
+  secondaryButtonText: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: Colors.light.primary,
   },
 });
 
