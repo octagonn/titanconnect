@@ -69,6 +69,8 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (currentUser?.avatar) {
       setAvatarUrl(`${currentUser.avatar}?v=${Date.now()}`); // ensure cache busting
+    } else {
+      setAvatarUrl(undefined);
     }
   }, [currentUser?.avatar]);
 

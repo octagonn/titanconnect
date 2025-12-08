@@ -31,6 +31,17 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     borderColor: '#ffffff', 
   },
+  avatarPlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    marginBottom: 16,
+    borderWidth: 4,
+    borderColor: '#ffffff',
+    backgroundColor: Colors.light.backgroundSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   // For profile picture edit button
   editProfileIconButton: { 
     position: 'absolute',
@@ -270,6 +281,128 @@ uploadingText: {
   color: "#fff",
   fontSize: 16,
   fontWeight: "600",
+},
+editButton: {
+  paddingHorizontal: 8,
+},
+editContainer: {
+  flex: 1,
+  backgroundColor: Colors.light.background,
+},
+editHeader: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  paddingHorizontal: 16,
+  paddingTop: 48,
+  paddingBottom: 12,
+  borderBottomWidth: 1,
+  borderBottomColor: Colors.light.border,
+},
+cancelText: {
+  color: Colors.light.textSecondary,
+  fontWeight: '600' as const,
+},
+editTitle: {
+  fontSize: 18,
+  fontWeight: '700' as const,
+  color: Colors.light.text,
+},
+saveButton: {
+  padding: 6,
+},
+editContent: {
+  padding: 20,
+  gap: 16,
+},
+editAvatarWrap: {
+  alignSelf: 'center',
+  position: 'relative',
+},
+editAvatar: {
+  width: 140,
+  height: 140,
+  borderRadius: 70,
+},
+editAvatarPlaceholder: {
+  width: 140,
+  height: 140,
+  borderRadius: 70,
+  backgroundColor: Colors.light.inputBackground,
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+editAvatarOverlay: {
+  position: 'absolute',
+  bottom: 6,
+  right: 6,
+  backgroundColor: 'rgba(0,0,0,0.6)',
+  borderRadius: 14,
+  paddingHorizontal: 10,
+  paddingVertical: 6,
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 6,
+},
+editAvatarText: {
+  color: '#fff',
+  fontWeight: '600' as const,
+  fontSize: 12,
+},
+editField: {
+  gap: 6,
+},
+editLabel: {
+  fontSize: 14,
+  fontWeight: '600' as const,
+  color: Colors.light.text,
+},
+editInput: {
+  backgroundColor: Colors.light.inputBackground,
+  borderRadius: 12,
+  paddingHorizontal: 14,
+  paddingVertical: 10,
+  fontSize: 15,
+  color: Colors.light.text,
+},
+editTextarea: {
+  minHeight: 100,
+  textAlignVertical: 'top',
+},
+interestsEditScrollView: {
+  maxHeight: 300,
+},
+interestsEditContainer: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: 10,
+  paddingBottom: 8,
+},
+interestChipEdit: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 6,
+  paddingHorizontal: 14,
+  paddingVertical: 8,
+  borderRadius: 20,
+  backgroundColor: Colors.light.inputBackground,
+  borderWidth: 2,
+  borderColor: Colors.light.border,
+},
+interestChipEditSelected: {
+  backgroundColor: Colors.light.primary,
+  borderColor: Colors.light.primary,
+},
+interestChipTextEdit: {
+  fontSize: 13,
+  color: Colors.light.text,
+  fontWeight: '600' as const,
+},
+interestChipTextEditSelected: {
+  color: '#ffffff',
+},
+chipIconEdit: {
+  marginLeft: 2,
 },
 
 

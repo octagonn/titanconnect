@@ -85,20 +85,6 @@ export default function EmailPasswordAuthScreen() {
         return;
       }
 
-      // Signup flow with graceful fallback if account already exists
-      const preflight = await signInWithEmailAndPassword(email, password);
-      if (preflight.success) {
-        // Account already exists; treat as sign-in
-        return;
-      }
-      if (preflight.needsVerification) {
-        router.push({
-          pathname: '/verify-email',
-          params: { email, mode: 'unverified' },
-        });
-        return;
-      }
-
       const signupResult = await signUpWithEmailAndPassword(email, password, role);
 
       if (signupResult.success) {

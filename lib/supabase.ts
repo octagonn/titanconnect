@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import * as Linking from 'expo-linking';
 
 // TitanConnect Supabase project (public anon credentials – safe to ship in the client).
 // We intentionally hardcode these so a stale EXPO_PUBLIC_SUPABASE_URL in your shell
@@ -80,3 +81,39 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false,
   },
 });
+
+/**
+ * Get the email verification redirect URL that will open the app
+ * For development/testing: tries to use current Expo Go URL if available,
+ * otherwise falls back to the app's custom URL scheme (myapp://)
+ */
+export async function getEmailRedirectUrl(): Promise<string> {
+  if (Platform.OS === 'web') {
+    // For web, use the current origin
+    if (typeof window !== 'undefined') {
+      return `${window.location.origin}/verify-email`;
+    }
+    return '/verify-email';
+  }
+
+  // Try to get the current Expo Go URL (works when app is running)
+  try {
+    const url = await Linking.getInitialURL();
+    if (url) {
+      const parsed = Linking.parse(url);
+      // If we're in Expo Go (exp:// scheme), use that URL
+      if (parsed.scheme === 'exp' || parsed.scheme?.startsWith('exp')) {
+        const host = parsed.hostname || '';
+        const port = parsed.port ? `:${parsed.port}` : '';
+        return `exp://${host}${port}/--/verify-email`;
+      }
+    }
+  } catch (error) {
+    // Ignore errors, fall back to custom scheme
+  }
+
+  // Fallback: use the app's custom URL scheme (myapp://)
+  // This works for production builds and will also work in Expo Go
+  // if Supabase is configured to allow it
+  return 'myapp://verify-email';
+}

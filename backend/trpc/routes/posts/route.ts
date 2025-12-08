@@ -12,7 +12,7 @@ export const postsRouter = createTRPCRouter({
       })
     )
     .query(async ({ ctx, input }) => {
-      const { limit, cursor, search } = input;
+      const { limit, cursor } = input;
 
       let query = ctx.supabase
         .from('posts')
@@ -37,11 +37,6 @@ export const postsRouter = createTRPCRouter({
           )
         `)
         .order('created_at', { ascending: false });
-
-      if (search && search.trim()) {
-        const term = `%${search.trim().replace(/[%]/g, '\\%')}%`;
-        query = query.or(`content.ilike.${term},profiles.name.ilike.${term}`);
-      }
 
       if (cursor) {
         query = query.lt('created_at', cursor);

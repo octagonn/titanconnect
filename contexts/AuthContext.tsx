@@ -1,7 +1,7 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { User } from '@/types';
-import { supabase } from '@/lib/supabase';
+import { supabase, getEmailRedirectUrl } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
 
 type AuthRole = 'student' | 'faculty';
@@ -142,11 +142,12 @@ export const [AuthContext, useAuth] = createContextHook(() => {
   const signUpWithEmailAndPassword = useCallback(
     async (email: string, password: string, role: AuthRole): Promise<SignUpResult> => {
       try {
+        const redirectUrl = await getEmailRedirectUrl();
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            emailRedirectTo: undefined,
+            emailRedirectTo: redirectUrl,
             data: { role },
           },
         });
@@ -174,9 +175,13 @@ export const [AuthContext, useAuth] = createContextHook(() => {
 
   const resendVerification = useCallback(async (email: string) => {
     try {
+      const redirectUrl = await getEmailRedirectUrl();
       const { error } = await supabase.auth.resend({
         type: 'signup',
         email,
+        options: {
+          emailRedirectTo: redirectUrl,
+        },
       });
 
       if (error) throw error;

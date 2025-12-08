@@ -18,31 +18,71 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useResponsiveLayout } from '@/lib/responsive';
 
 const MAJORS = [
-  'Computer Science',
+  // Arts
+  'Art',
+  'Dance',
+  'Music',
+  'Theatre Arts',
+  // Business and Economics
+  'Accounting',
   'Business Administration',
-  'Psychology',
-  'Biology',
-  'Mechanical Engineering',
+  'Economics',
+  'International Business',
+  // Communications
   'Communications',
+  'Communication Studies',
+  // Education
+  'Child and Adolescent Development',
+  'Early Childhood Education',
+  // Engineering and Computer Science
+  'Civil Engineering',
+  'Computer Engineering',
+  'Computer Science',
+  'Electrical Engineering',
+  'Mechanical Engineering',
+  'Software Engineering',
+  // Health and Human Development
+  'Athletic Training',
+  'Health Science',
+  'Human Services',
+  'Kinesiology',
   'Nursing',
-  'Graphic Design',
+  'Public Health',
+  // Humanities and Social Sciences
+  'African American Studies',
+  'American Studies',
+  'Anthropology',
+  'Asian American Studies',
+  'Chicana and Chicano Studies',
+  'Criminal Justice',
+  'English',
+  'Environmental Studies',
+  'Geography',
+  'History',
+  'Liberal Studies',
+  'Linguistics',
+  'Philosophy',
+  'Political Science',
+  'Psychology',
+  'Public Administration',
+  'Religious Studies',
+  'Sociology',
+  'Spanish',
+  'Women and Gender Studies',
+  // Natural Sciences and Mathematics
+  'Biochemistry',
+  'Biological Science',
+  'Chemistry',
+  'Geology',
+  'Mathematics',
+  'Physics',
+  // Other
   'Other',
 ];
 
 const YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate'];
 
-const INTERESTS = [
-  'Gaming',
-  'Sports',
-  'Music',
-  'Art',
-  'Coding',
-  'Reading',
-  'Fitness',
-  'Photography',
-  'Travel',
-  'Food',
-];
+import { INTERESTS } from '@/constants/interests';
 
 export default function SetupProfileScreen() {
   const router = useRouter();
