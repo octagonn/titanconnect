@@ -1,8 +1,10 @@
+//lib/uploadProfilePicture.ts
 import { supabase } from "@/lib/supabase";
 import * as FileSystem from "expo-file-system/legacy";
 import { Alert } from "react-native";
 import { Buffer } from "buffer";
-
+// Uploads or updates a user's profile picture in Supabase Storage and 
+// returns the public URL whcih is then uploaded to the profiles table under column avatar_url
 export async function uploadProfilePicture(uri: string, userId: string) {
   try {
     const base64 = await FileSystem.readAsStringAsync(uri, { encoding: "base64" });
