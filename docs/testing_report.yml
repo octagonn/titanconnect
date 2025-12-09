@@ -1,36 +1,41 @@
 testing_report:
+  test_cases:
+    - "User wants to update their bio in the Profile screen, and it is properly updated in the database."
+    - "User wants to upload a new profile picture, and it is stored in the correct bucket and retrievable via DB call."
+    - "User enters an excessively long bio (>150 chars), and it is trimmed to fit the limit."
+
   tests:
     updateUserBio:
       what_is_tested:
-        - "Supabase is called with correct table, update payload, and user ID filter."
-        - "Function returns success=true when database update works."
+        - "Supabase is called with the correct table, update payload, and user ID filter."
+        - "Function returns success=true when the database update works."
         - "Function handles Supabase errors and returns success=false."
       expected_outcome:
-        - "Correct Supabase method chain: from('profiles') → update({bio}) → eq('id', userId)."
-        - "Successful updates return the updated bio object. Used in Profile page when updating bio."
-        - "Errors return an error object with message."
+        - "Correct Supabase method chain: from('profiles') → update({ bio }) → eq('id', userId)."
+        - "Successful updates return the updated bio object (used on the Profile page)."
+        - "Errors return an error object containing the message."
       result: "All tests passed. Supabase calls and error handling work as expected."
 
     uploadProfilePicture:
       what_is_tested:
-        - "Profile image file is read from device."
+        - "Profile image file is read from the device."
         - "Correct Supabase storage bucket ('avatars') is used."
         - "Function returns a public URL after upload."
       expected_outcome:
         - "FileSystem.readAsStringAsync is called once."
-        - "supabase.storage.from('avatars') method is called."
-        - "The Returned URL matches expected public URL format (essentially validation)."
+        - "supabase.storage.from('avatars') is called."
+        - "Returned URL matches expected public URL structure."
       result: "All tests passed. Upload flow works correctly with mocked dependencies."
 
     profileUtils:
       limitBio:
         what_is_tested:
-          - "Keeps bios under 150 chars unchanged. (Standard char limit for Instagram)"
+          - "Keeps bios under 150 chars unchanged."
           - "Trims bios longer than 150 chars."
           - "Handles edge cases (exactly 150 chars, empty string)."
         expected_outcome:
           - "Short bios return unchanged."
-          - "Long bios are exactly 150 chars."
+          - "Long bios are trimmed to exactly 150 characters."
         result: "All tests passed."
 
       formatJoinDate:
@@ -41,15 +46,30 @@ testing_report:
         result: "Passed."
 
   previous_bugs_and_fixes:
-    - bug: "Supabase mock was not being used, causing real network calls."
-      fix: "Added jest.mock('@/lib/supabase', ...) to force mocked client."
+    - bug: "Supabase mock was not being used, resulting in real network calls."
+      fix: "Added jest.mock('@/lib/supabase') to properly force mock usage."
     - bug: "uploadProfilePicture test returned undefined URL."
-      fix: "Adjusted mock storage return value to include publicUrl key."
-    -bug: "UI looked funky for excessively long bios."
-      fix: "Added limitBio utility to trim bios to 150 characters."
+      fix: "Adjusted mock storage return value to include the publicUrl key."
+    - bug: "UI displayed incorrectly for overly long bios."
+      fix: "Added limitBio utility to restrict bios to 150 characters."
 
-  improvements for future tests:
-    - "Add tests for profanity, racism, and controversial speech filtering in user bios."
-    - "Improve error messages for easier debugging."
+  improvements_for_future_tests:
+    - "Add tests for filtering profanity or harmful language in user bios."
+    - "Improve error messages for easier developer debugging."
     - "Add client-side validation before making Supabase requests."
 
+  test_run_output_via_jest: |
+    $ npm test
+
+    > expo-app@1.0.0 test
+    > jest
+
+     PASS  tests/updateUserBio.test.ts
+     PASS  tests/uploadProfilePicture.test.ts
+     PASS  tests/profileUtils.test.ts
+
+    Test Suites: 3 passed, 3 total
+    Tests:       6 passed, 6 total
+    Snapshots:   0 total
+    Time:        3.682 s, estimated 4 s
+    Ran all test suites.
