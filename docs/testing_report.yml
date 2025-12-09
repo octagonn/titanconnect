@@ -1,0 +1,55 @@
+testing_report:
+  tests:
+    updateUserBio:
+      what_is_tested:
+        - "Supabase is called with correct table, update payload, and user ID filter."
+        - "Function returns success=true when database update works."
+        - "Function handles Supabase errors and returns success=false."
+      expected_outcome:
+        - "Correct Supabase method chain: from('profiles') → update({bio}) → eq('id', userId)."
+        - "Successful updates return the updated bio object. Used in Profile page when updating bio."
+        - "Errors return an error object with message."
+      result: "All tests passed. Supabase calls and error handling work as expected."
+
+    uploadProfilePicture:
+      what_is_tested:
+        - "Profile image file is read from device."
+        - "Correct Supabase storage bucket ('avatars') is used."
+        - "Function returns a public URL after upload."
+      expected_outcome:
+        - "FileSystem.readAsStringAsync is called once."
+        - "supabase.storage.from('avatars') method is called."
+        - "The Returned URL matches expected public URL format (essentially validation)."
+      result: "All tests passed. Upload flow works correctly with mocked dependencies."
+
+    profileUtils:
+      limitBio:
+        what_is_tested:
+          - "Keeps bios under 150 chars unchanged. (Standard char limit for Instagram)"
+          - "Trims bios longer than 150 chars."
+          - "Handles edge cases (exactly 150 chars, empty string)."
+        expected_outcome:
+          - "Short bios return unchanged."
+          - "Long bios are exactly 150 chars."
+        result: "All tests passed."
+
+      formatJoinDate:
+        what_is_tested:
+          - "Formats 'YYYY-MM-DD' into 'Month YYYY'."
+        expected_outcome:
+          - "'2024-03-01' becomes 'March 2024'."
+        result: "Passed."
+
+  previous_bugs_and_fixes:
+    - bug: "Supabase mock was not being used, causing real network calls."
+      fix: "Added jest.mock('@/lib/supabase', ...) to force mocked client."
+    - bug: "uploadProfilePicture test returned undefined URL."
+      fix: "Adjusted mock storage return value to include publicUrl key."
+    -bug: "UI looked funky for excessively long bios."
+      fix: "Added limitBio utility to trim bios to 150 characters."
+
+  improvements for future tests:
+    - "Add tests for profanity, racism, and controversial speech filtering in user bios."
+    - "Improve error messages for easier debugging."
+    - "Add client-side validation before making Supabase requests."
+

@@ -1,10 +1,10 @@
-To create a test case:
+To create an actual function/method test case:
 - Identify the function or module you want to test.
 - Create a new test file in the `tests` directory, following the naming convention `<functionName>.test.ts`.
 - Use npm run test to run your tests and ensure they pass using Jest
 
 
-# TitanConnect App Test Cases
+# TitanConnect App UI Test Cases
 #  structure:
 # testcases:
 #    <screen_name>:
