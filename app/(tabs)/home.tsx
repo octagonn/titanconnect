@@ -643,8 +643,40 @@ export default function HomeScreen() {
 
   const friendButtonDisabled = useMemo(() => {
     if (!profileQuery.data) return false;
-    return profileQuery.data.relationship === 'accepted' || profileQuery.data.relationship === 'blocked';
+    return (
+      profileQuery.data.relationship === 'accepted' ||
+      profileQuery.data.relationship === 'blocked'
+    );
   }, [profileQuery.data]);
+
+  // Ensure only one button is rendered based on the relationship state
+  const renderFriendButton = () => {
+    if (!profileQuery.data) return null;
+
+    const { relationship } = profileQuery.data;
+
+    if (relationship === 'pending') {
+      return (
+        <TouchableOpacity
+          style={[styles.profileButton, styles.profileSecondary]}
+          onPress={() => removeConnection.mutate({ targetUserId: profileQuery.data.id })}
+          disabled={friendButtonDisabled}
+        >
+          <Text style={styles.profileSecondaryText}>Cancel Request</Text>
+        </TouchableOpacity>
+      );
+    }
+
+    return (
+      <TouchableOpacity
+        style={[styles.profileButton, styles.profilePrimary]}
+        onPress={handleFriendAction}
+        disabled={friendButtonDisabled}
+      >
+        <Text style={styles.profileButtonText}>{friendButtonLabel}</Text>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -964,31 +996,13 @@ export default function HomeScreen() {
                   </View>
                 ) : null}
                 <View style={styles.profileActions}>
-                  <TouchableOpacity
-                    style={[
-                      styles.profileButton,
-                      friendButtonDisabled ? styles.profileButtonDisabled : styles.profilePrimary,
-                    ]}
-                    disabled={friendButtonDisabled || sendRequest.isPending || respond.isPending || removeConnection.isPending}
-                    onPress={handleFriendAction}
-                  >
-                    <Text style={styles.profileButtonText}>{friendButtonLabel}</Text>
-                  </TouchableOpacity>
+                  {renderFriendButton()}
                   <TouchableOpacity
                     style={[styles.profileButton, styles.profileSecondary]}
                     onPress={() => upsertConversation.mutate({ otherUserId: profileQuery.data.id })}
                   >
                     <Text style={[styles.profileButtonText, styles.profileSecondaryText]}>Message</Text>
                   </TouchableOpacity>
-                  {profileQuery.data.relationship === 'pending' && (
-                    <TouchableOpacity
-                      style={[styles.profileButton, styles.profileSecondary]}
-                      onPress={() => removeConnection.mutate({ targetUserId: profileQuery.data.id })}
-                      disabled={removeConnection.isPending}
-                    >
-                      <Text style={[styles.profileButtonText, styles.profileSecondaryText]}>Cancel Request</Text>
-                    </TouchableOpacity>
-                  )}
                 </View>
               </View>
 
