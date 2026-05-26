@@ -95,3 +95,13 @@ NativeWind (Tailwind-like utility classes) is the primary styling approach. `sty
 - `protectedProcedure` must be used for any tRPC route that accesses user-specific data
 - Schema validation uses Zod v4 (`zod` package)
 - Deep links use the `myapp://` scheme
+
+## Knowledge Graph
+
+After making any code changes, update the project knowledge graph by invoking the graphify skill:
+
+```
+/graphify update
+```
+
+This keeps the graph in sync with the latest codebase so future queries reflect current state.

@@ -3,11 +3,6 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import { createClient, User } from "@supabase/supabase-js";
 import superjson from "superjson";
 
-// Match the safety logic from lib/supabase.ts so we never hit old/stale projects
-const FALLBACK_SUPABASE_URL = "https://gzfhfwiizdlptcxsdqxt.supabase.co";
-const FALLBACK_SUPABASE_ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd6Zmhmd2lpemRscHRjeHNkcXh0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE2NjkwMTEsImV4cCI6MjA3NzI0NTAxMX0.8MUB-eZVyi6vh3NUsWr7ZbOq4nz--5WEuP6w2AgWuq0";
-
 export const createContext = async (opts: FetchCreateContextFnOptions) => {
   const authHeader = opts.req.headers.get("authorization");
   console.log("TRPC Context - Auth Header:", authHeader ? "Present" : "Missing");
@@ -20,20 +15,8 @@ export const createContext = async (opts: FetchCreateContextFnOptions) => {
       ? authHeader.slice("bearer ".length)
       : null;
 
-  // Read env vars if present; only trust URL if it still points at the TitanConnect project.
-  const envSupabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-  const envSupabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-
-  const supabaseUrl =
-    envSupabaseUrl &&
-    envSupabaseUrl.includes("gzfhfwiizdlptcxsdqxt.supabase.co")
-      ? envSupabaseUrl
-      : FALLBACK_SUPABASE_URL;
-
-  const supabaseAnonKey =
-    envSupabaseAnonKey && envSupabaseAnonKey.length > 0
-      ? envSupabaseAnonKey
-      : FALLBACK_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
+  const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     global: {

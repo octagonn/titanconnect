@@ -3,3 +3,6 @@ node_modules
 .expo
 enrico-workflow.md
 graphify-out/ 
+new.temp.txt
+temp.md
+*.temp.*

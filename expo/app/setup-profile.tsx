@@ -1,5 +1,5 @@
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { User as UserIcon, GraduationCap, Calendar, Heart, FileText, Check, Sparkles } from 'lucide-react-native';
+import { User as UserIcon, GraduationCap, Calendar, Heart, FileText, Check, Sparkles, ChevronRight } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useResponsiveLayout } from '@/lib/responsive';
@@ -91,11 +91,16 @@ export default function SetupProfileScreen() {
 
   const [name, setName] = useState<string>('');
   const [major, setMajor] = useState<string>('');
+  const [majorSearch, setMajorSearch] = useState<string>('');
   const [year, setYear] = useState<string>('');
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+  const [interestSearch, setInterestSearch] = useState<string>('');
   const [bio, setBio] = useState<string>('');
   const [fadeAnim] = useState(new Animated.Value(0));
   const { isSmallHeight, insets } = useResponsiveLayout();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const majorFieldRef = useRef<View>(null);
+  const [yearScrolledToEnd, setYearScrolledToEnd] = useState(false);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -142,6 +147,7 @@ export default function SetupProfileScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
+          ref={scrollViewRef}
           contentContainerStyle={[
             styles.scrollContent,
             isSmallHeight && styles.scrollContentSmall,
@@ -185,23 +191,50 @@ export default function SetupProfileScreen() {
               </View>
             </View>
 
-            <View style={styles.field}>
+            <View ref={majorFieldRef} style={styles.field}>
               <View style={styles.labelContainer}>
                 <GraduationCap size={18} color={Colors.light.primary} />
                 <Text style={styles.label}>
                   Major <Text style={styles.required}>*</Text>
                 </Text>
               </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.chipScrollContainer}
-              >
-                {MAJORS.map((m) => (
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Search your major..."
+                  placeholderTextColor={Colors.light.placeholder}
+                  value={majorSearch}
+                  onFocus={() => {
+                    setTimeout(() => {
+                      majorFieldRef.current?.measureLayout(
+                        scrollViewRef.current as any,
+                        (_x, y) => {
+                          scrollViewRef.current?.scrollTo({ y: y - 16, animated: true });
+                        },
+                        () => {}
+                      );
+                    }, 300);
+                  }}
+                  onChangeText={(text) => {
+                    setMajorSearch(text);
+                    if (major && !major.toLowerCase().includes(text.toLowerCase())) {
+                      setMajor('');
+                    }
+                  }}
+                />
+                {major && <Check size={20} color={Colors.light.success} />}
+              </View>
+              <View style={styles.chipContainer}>
+                {majorSearch.length > 0 && MAJORS.filter((m) =>
+                  m.toLowerCase().includes(majorSearch.toLowerCase())
+                ).map((m) => (
                   <TouchableOpacity
                     key={m}
                     style={[styles.chip, major === m && styles.chipSelected]}
-                    onPress={() => setMajor(m)}
+                    onPress={() => {
+                      setMajor(m);
+                      setMajorSearch(m);
+                    }}
                     activeOpacity={0.7}
                   >
                     <Text style={[styles.chipText, major === m && styles.chipTextSelected]}>
@@ -210,7 +243,7 @@ export default function SetupProfileScreen() {
                     {major === m && <Check size={16} color="#ffffff" style={styles.chipIcon} />}
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </View>
             </View>
 
             <View style={styles.field}>
@@ -220,25 +253,38 @@ export default function SetupProfileScreen() {
                   Year <Text style={styles.required}>*</Text>
                 </Text>
               </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.chipScrollContainer}
-              >
-                {YEARS.map((y) => (
-                  <TouchableOpacity
-                    key={y}
-                    style={[styles.chip, year === y && styles.chipSelected]}
-                    onPress={() => setYear(y)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.chipText, year === y && styles.chipTextSelected]}>
-                      {y}
-                    </Text>
-                    {year === y && <Check size={16} color="#ffffff" style={styles.chipIcon} />}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+              <View style={styles.fadeScrollWrapper}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  onScroll={({ nativeEvent }) => {
+                    const { contentOffset, layoutMeasurement, contentSize } = nativeEvent;
+                    setYearScrolledToEnd(
+                      contentOffset.x + layoutMeasurement.width >= contentSize.width - 8
+                    );
+                  }}
+                  scrollEventThrottle={16}
+                >
+                  {YEARS.map((y) => (
+                    <TouchableOpacity
+                      key={y}
+                      style={[styles.chip, year === y && styles.chipSelected]}
+                      onPress={() => setYear(y)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.chipText, year === y && styles.chipTextSelected]}>
+                        {y}
+                      </Text>
+                      {year === y && <Check size={16} color="#ffffff" style={styles.chipIcon} />}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                {!yearScrolledToEnd && (
+                  <View style={styles.scrollHint} pointerEvents="none">
+                    <ChevronRight size={18} color={Colors.light.textSecondary} />
+                  </View>
+                )}
+              </View>
             </View>
 
             <View style={styles.field}>
@@ -246,28 +292,40 @@ export default function SetupProfileScreen() {
                 <Heart size={18} color={Colors.light.primary} />
                 <Text style={styles.label}>Interests (Optional)</Text>
               </View>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Start typing to reveal more results"
+                  placeholderTextColor={Colors.light.placeholder}
+                  value={interestSearch}
+                  onChangeText={setInterestSearch}
+                />
+              </View>
               <View style={styles.chipContainer}>
-                {INTERESTS.map((interest) => (
-                  <TouchableOpacity
-                    key={interest}
-                    style={[
-                      styles.chip,
-                      selectedInterests.includes(interest) && styles.chipSelected,
-                    ]}
-                    onPress={() => toggleInterest(interest)}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.chipText,
-                        selectedInterests.includes(interest) && styles.chipTextSelected,
-                      ]}
+                {(() => {
+                  const selected = selectedInterests;
+                  const query = interestSearch.toLowerCase();
+                  const filtered = interestSearch.length > 0
+                    ? INTERESTS.filter((i) => i.toLowerCase().includes(query))
+                    : INTERESTS.slice(0, 6);
+                  const visible = [
+                    ...selected,
+                    ...filtered.filter((i) => !selected.includes(i)),
+                  ];
+                  return visible.map((interest) => (
+                    <TouchableOpacity
+                      key={interest}
+                      style={[styles.chip, selectedInterests.includes(interest) && styles.chipSelected]}
+                      onPress={() => toggleInterest(interest)}
+                      activeOpacity={0.7}
                     >
-                      {interest}
-                    </Text>
-                    {selectedInterests.includes(interest) && <Check size={16} color="#ffffff" style={styles.chipIcon} />}
-                  </TouchableOpacity>
-                ))}
+                      <Text style={[styles.chipText, selectedInterests.includes(interest) && styles.chipTextSelected]}>
+                        {interest}
+                      </Text>
+                      {selectedInterests.includes(interest) && <Check size={16} color="#ffffff" style={styles.chipIcon} />}
+                    </TouchableOpacity>
+                  ));
+                })()}
               </View>
             </View>
 
@@ -414,8 +472,15 @@ const styles = StyleSheet.create({
     minHeight: 100,
     paddingTop: 16,
   },
-  chipScrollContainer: {
-    flexDirection: 'row',
+  fadeScrollWrapper: {
+    position: 'relative',
+  },
+  scrollHint: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
   },
   chipContainer: {
     flexDirection: 'row',

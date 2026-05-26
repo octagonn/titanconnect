@@ -11,7 +11,7 @@
     "start:android": "expo start --android",
     "lint": "expo lint",
     "supabase": "supabase",
-    "supabase:link": "supabase link --project-ref gzfhfwiizdlptcxsdqxt",
+    "supabase:link": "supabase link --project-ref txyrydtuccyyaecoxcuv",
     "supabase:status": "supabase status",
     "supabase:db:push": "supabase db push",
     "supabase:db:pull": "supabase db pull",
