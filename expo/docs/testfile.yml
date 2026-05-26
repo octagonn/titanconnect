@@ -1,0 +1,42 @@
+# This is a sample YAML configuration file for testing purposes.IT MEANS NOTHING!
+app:
+	name: titanconnect
+	version: 1.0.0
+	description: Sample arbitrary YAML configuration for testing
+
+environment:
+	node: 18
+	expo: "48.0.0"
+	debug: true
+
+services:
+	api:
+		host: api.titanconnect.local
+		port: 3000
+		timeout: 5000
+	auth:
+		provider: oauth2
+		token_expiry: 3600
+
+features:
+	- realtime
+	- offline-support
+	- push-notifications
+
+users:
+	- id: 1
+		name: Alice
+		roles: [admin, developer]
+	- id: 2
+		name: Bob
+		roles: [user]
+
+logging:
+	level: info
+	file: /var/log/titanconnect/app.log
+
+maintenance:
+	window: "Sunday 02:00-03:00"
+	enabled: false
+
+$CURSOR$
