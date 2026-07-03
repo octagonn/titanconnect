@@ -1,7 +1,8 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { QrCode, Scan, Users } from 'lucide-react-native';
 import { useMemo, useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Alert, ScrollView, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, Image } from 'react-native';
+import { showAlert } from '@/lib/alert';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { trpc } from '@/lib/trpc';
@@ -41,7 +42,7 @@ export default function TapInScreen() {
         data.split('/').pop();
 
       if (!maybeToken) {
-        Alert.alert('Invalid QR Code', 'Unrecognized code');
+        showAlert('Invalid QR Code', 'Unrecognized code');
         setShowScanner(false);
         return;
       }
@@ -49,7 +50,7 @@ export default function TapInScreen() {
       setScannedToken(maybeToken);
     } catch (error) {
       console.error('Scan error:', error);
-      Alert.alert('Error', 'Failed to scan QR code');
+      showAlert('Error', 'Failed to scan QR code');
     }
   };
 
@@ -57,7 +58,7 @@ export default function TapInScreen() {
     if (!permission?.granted) {
       const result = await requestPermission();
       if (!result.granted) {
-        Alert.alert('Permission Required', 'Camera permission is needed to scan QR codes');
+        showAlert('Permission Required', 'Camera permission is needed to scan QR codes');
         return;
       }
     }
@@ -93,7 +94,7 @@ export default function TapInScreen() {
 
   useEffect(() => {
     if (resolveToken.isError) {
-      Alert.alert('Invalid QR Code', 'This code is not recognized.');
+      showAlert('Invalid QR Code', 'This code is not recognized.');
       setShowScanner(false);
       setScannedToken(null);
     }
@@ -222,6 +223,8 @@ export default function TapInScreen() {
           <CameraView
             style={styles.camera}
             facing="back"
+            // barcodeTypes must be explicit for scanning to activate on web
+            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
             onBarcodeScanned={(result) => {
               if (result.data) {
                 handleScan(result.data);

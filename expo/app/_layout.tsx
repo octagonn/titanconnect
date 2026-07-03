@@ -11,7 +11,8 @@ import Colors from "@/constants/colors";
 import { trpc, trpcClient } from "@/lib/trpc";
 import * as Linking from "expo-linking";
 import { supabase } from "@/lib/supabase";
-import { Alert } from "react-native";
+import { showAlert } from '@/lib/alert';
+import AddToHomeScreen from '@/components/AddToHomeScreen';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -64,7 +65,7 @@ function RootLayoutNav() {
 
           if (error) {
             console.error('Error setting session from deep link:', error);
-            Alert.alert(
+            showAlert(
               'Verification Failed',
               'There was an error verifying your email. Please try again.',
               [{ text: 'OK', onPress: () => router.replace('/welcome') }]
@@ -73,7 +74,7 @@ function RootLayoutNav() {
           }
 
           // Session set successfully - auth state will update automatically
-          Alert.alert(
+          showAlert(
             'Email Verified',
             'Your email has been verified successfully!',
             [{ text: 'OK' }]
@@ -90,7 +91,7 @@ function RootLayoutNav() {
 
           if (error) {
             console.error('Email verification error:', error);
-            Alert.alert(
+            showAlert(
               'Verification Failed',
               'The verification link is invalid or has expired. Please request a new verification email.',
               [{ text: 'OK', onPress: () => router.replace('/welcome') }]
@@ -98,7 +99,7 @@ function RootLayoutNav() {
             return;
           }
 
-          Alert.alert(
+          showAlert(
             'Email Verified',
             'Your email has been verified successfully!',
             [{ text: 'OK' }]
@@ -106,7 +107,7 @@ function RootLayoutNav() {
         }
       } catch (error) {
         console.error('Error handling deep link:', error);
-        Alert.alert(
+        showAlert(
           'Error',
           'There was an error processing the verification link.',
           [{ text: 'OK' }]
@@ -216,6 +217,7 @@ export default function RootLayout() {
             <GestureHandlerRootView style={{ flex: 1 }}>
               <SafeAreaProvider>
                 <RootLayoutNav />
+                <AddToHomeScreen />
               </SafeAreaProvider>
             </GestureHandlerRootView>
           </AppContext>

@@ -1,18 +1,8 @@
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { Send } from 'lucide-react-native';
 import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TextInput,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  Image,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { showAlert } from '@/lib/alert';
 import Colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -54,7 +44,7 @@ export default function ChatScreen() {
       messagesQuery.refetch();
     },
     onError: (err) => {
-      Alert.alert('Send failed', err.message || 'Could not send message. Please try again.');
+      showAlert('Send failed', err.message || 'Could not send message. Please try again.');
     },
   });
 
@@ -107,7 +97,7 @@ export default function ChatScreen() {
 
   const confirmDelete = useCallback(
     (message: Message) => {
-      Alert.alert('Delete message?', 'This will remove the message for both participants.', [
+      showAlert('Delete message?', 'This will remove the message for both participants.', [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',

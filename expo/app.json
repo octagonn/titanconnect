@@ -29,7 +29,9 @@
       "package": "app.titanconnect.campus_app",
       "permissions": [
         "CAMERA",
-        "RECORD_AUDIO"
+        "RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -49,6 +51,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "4715cadd-837a-4629-ab2e-cb7294c7d9da"
+      }
+    },
+    "owner": "ricozama121803"
   }
 }

@@ -2,21 +2,8 @@
 import { useRouter, useNavigation } from 'expo-router';
 import { LogOut, Mail, GraduationCap, Award, Heart, Edit2, Image as ImageIcon, Save, Pencil, University, Check, User } from 'lucide-react-native';
 import { useLayoutEffect, useCallback, useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Image,
-  ScrollView,
-  Alert,
-  Modal,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  ActionSheetIOS,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Modal, TextInput, KeyboardAvoidingView, Platform, ActionSheetIOS, ActivityIndicator } from 'react-native';
+import { showAlert } from '@/lib/alert';
 import * as ImagePicker from 'expo-image-picker';
 import { BlurView } from 'expo-blur';
 import { Buffer } from 'buffer';
@@ -75,7 +62,7 @@ export default function ProfileScreen() {
   }, [currentUser?.avatar]);
 
   const handleSignOut = useCallback(() => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+    showAlert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Sign Out',
@@ -105,15 +92,15 @@ export default function ProfileScreen() {
         .eq('id', currentUser.id);
 
       if (error) {
-        Alert.alert('Error', 'Failed to add bio. Please try again.');
+        showAlert('Error', 'Failed to add bio. Please try again.');
       } else {
-        Alert.alert('Success', 'Bio added successfully!');
+        showAlert('Success', 'Bio added successfully!');
         currentUser.bio = newBio; // Update the local user object
         setIsAddingBio(false);
         setNewBio('');
       }
     } catch (err) {
-      Alert.alert('Error', 'An unexpected error occurred.');
+      showAlert('Error', 'An unexpected error occurred.');
     }
   };
 
@@ -127,15 +114,15 @@ export default function ProfileScreen() {
         .eq('id', currentUser.id);
 
       if (error) {
-        Alert.alert('Error', 'Failed to update bio. Please try again.');
+        showAlert('Error', 'Failed to update bio. Please try again.');
       } else {
-        Alert.alert('Success', 'Bio updated successfully!');
+        showAlert('Success', 'Bio updated successfully!');
         currentUser.bio = newBio; // Update the local user object
         setIsEditingBio(false);
         setNewBio('');
       }
     } catch (err) {
-      Alert.alert('Error', 'An unexpected error occurred.');
+      showAlert('Error', 'An unexpected error occurred.');
     }
   };
 
@@ -188,7 +175,7 @@ export default function ProfileScreen() {
       console.log("STEP 4: Upload/update response:", { result, error });
 
       if (error) {
-        Alert.alert(
+        showAlert(
           "Upload Failed",
           `Message: ${error.message}\nRaw:\n${JSON.stringify(error, null, 2)}`
         );
@@ -208,110 +195,120 @@ export default function ProfileScreen() {
 
     } catch (err: any) {
       console.log("UNEXPECTED ERROR:", err);
-      Alert.alert("Unexpected Error", err.message || err.toString());
+      showAlert("Unexpected Error", err.message || err.toString());
       return null;
     }
   };
 
 
-  const handleProfilePicAction = async () => {
-    if (Platform.OS !== "ios") {
-      Alert.alert("Unsupported Platform", "This feature is only available on iOS.");
-      return;
-    }
+  const pickAndUploadProfilePic = async (source: 'camera' | 'library') => {
+    if (!currentUser) return;
 
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        options: ["Cancel", "Take Photo", "Upload Photo"],
-        cancelButtonIndex: 0,
-      },
-      async (buttonIndex) => {
+    let result = null;
 
-        if (!currentUser) return;
+    try {
+      // --- TAKE PHOTO ---
+      if (source === 'camera') {
+        const { granted } = await ImagePicker.requestCameraPermissionsAsync();
+        if (!granted)
+          return showAlert("Permission Required", "Camera access is needed.");
 
-        let result = null;
-
-        try {
-          // --- TAKE PHOTO ---
-          if (buttonIndex === 1) {
-            const { granted } = await ImagePicker.requestCameraPermissionsAsync();
-            if (!granted)
-              return Alert.alert("Permission Required", "Camera access is needed.");
-
-            result = await ImagePicker.launchCameraAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              allowsEditing: true,
-              aspect: [1, 1],
-              quality: 1,
-            });
-          }
-
-          // --- UPLOAD PHOTO ---
-          if (buttonIndex === 2) {
-            const { granted } =
-              await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (!granted)
-              return Alert.alert(
-                "Permission Required",
-                "Photo library access is needed."
-              );
-
-            result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              allowsEditing: true,
-              aspect: [1, 1],
-              quality: 1,
-            });
-          }
-
-          if (!result || result.canceled) return;
-
-          const selectedUri = result.assets[0].uri;
-
-          // Upload to Supabase Storage
-          setIsUploading(true);
-
-          const publicUrl = await uploadProfilePicture(selectedUri, currentUser.id);
-
-          if (!publicUrl) {
-            setIsUploading(false);
-            return;
-          }
-
-          const { data, error } = await supabase
-            .from("profiles")
-            .update({ avatar_url: publicUrl })
-            .eq("id", currentUser.id)
-            .select();
-
-          setIsUploading(false);
-
-
-          console.log("⬅ UPDATE RESULT:", { data, error });
-
-          if (error) {
-            return Alert.alert(
-              "Failed to update profile picture",
-              `Database error:\n${error.message}\n\nRaw:\n${JSON.stringify(
-                error,
-                null,
-                2
-              )}`
-            );
-          }
-
-          // 🔥 Instant UI update
-          setAvatarUrl(publicUrl);
-          currentUser.avatar = publicUrl;
-
-          Alert.alert("Success", "Profile picture updated successfully!");
-        } catch (err: any) {
-          setIsUploading(false);
-          console.log("PROFILE PIC ERROR:", err);
-          Alert.alert("Unexpected Error", err.message || err.toString());
-        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 1,
+        });
       }
-    );
+
+      // --- UPLOAD PHOTO ---
+      if (source === 'library') {
+        const { granted } =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!granted)
+          return showAlert(
+            "Permission Required",
+            "Photo library access is needed."
+          );
+
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 1,
+        });
+      }
+
+      if (!result || result.canceled) return;
+
+      const selectedUri = result.assets[0].uri;
+
+      // Upload to Supabase Storage
+      setIsUploading(true);
+
+      const publicUrl = await uploadProfilePicture(selectedUri, currentUser.id);
+
+      if (!publicUrl) {
+        setIsUploading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .update({ avatar_url: publicUrl })
+        .eq("id", currentUser.id)
+        .select();
+
+      setIsUploading(false);
+
+
+      console.log("⬅ UPDATE RESULT:", { data, error });
+
+      if (error) {
+        return showAlert(
+          "Failed to update profile picture",
+          `Database error:\n${error.message}\n\nRaw:\n${JSON.stringify(
+            error,
+            null,
+            2
+          )}`
+        );
+      }
+
+      // 🔥 Instant UI update
+      setAvatarUrl(publicUrl);
+      currentUser.avatar = publicUrl;
+
+      showAlert("Success", "Profile picture updated successfully!");
+    } catch (err: any) {
+      setIsUploading(false);
+      console.log("PROFILE PIC ERROR:", err);
+      showAlert("Unexpected Error", err.message || err.toString());
+    }
+  };
+
+  const handleProfilePicAction = () => {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Cancel", "Take Photo", "Upload Photo"],
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) pickAndUploadProfilePic('camera');
+          if (buttonIndex === 2) pickAndUploadProfilePic('library');
+        }
+      );
+    } else if (Platform.OS === 'web') {
+      // Browsers use a file picker; no camera action sheet needed
+      pickAndUploadProfilePic('library');
+    } else {
+      showAlert("Update Profile Picture", "Choose a photo source", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Take Photo", onPress: () => pickAndUploadProfilePic('camera') },
+        { text: "Upload Photo", onPress: () => pickAndUploadProfilePic('library') },
+      ]);
+    }
   };
 
   const pickAvatar = async () => {
@@ -348,7 +345,7 @@ export default function ProfileScreen() {
       });
       setIsEditing(false);
     } catch (err) {
-      Alert.alert('Error', 'Failed to save profile');
+      showAlert('Error', 'Failed to save profile');
     } finally {
       setSaving(false);
     }

@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { showAlert } from '@/lib/alert';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
@@ -41,7 +42,7 @@ export default function OtherProfileScreen() {
       router.push(`/chat/${conv.id}` as any);
     },
     onError: (err) => {
-      Alert.alert('Message failed', err.message || 'Could not start conversation. Please try again.');
+      showAlert('Message failed', err.message || 'Could not start conversation. Please try again.');
     },
   });
 
@@ -59,7 +60,7 @@ export default function OtherProfileScreen() {
 
   const handleRemove = () => {
     if (!id) return;
-    Alert.alert('Remove friend?', 'This will remove the connection.', [
+    showAlert('Remove friend?', 'This will remove the connection.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: () => remove.mutate({ targetUserId: id }) },
     ]);

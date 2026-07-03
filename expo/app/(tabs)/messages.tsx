@@ -1,18 +1,8 @@
 import { useRouter } from 'expo-router';
 import { Search, Plus } from 'lucide-react-native';
 import { useState, useMemo, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Image,
-  TextInput,
-  Modal,
-  Pressable,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, TextInput, Modal, Pressable } from 'react-native';
+import { showAlert } from '@/lib/alert';
 import Colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -40,7 +30,7 @@ export default function MessagesScreen() {
       router.push(`/chat/${conv.id}` as any);
     },
     onError: (err) => {
-      Alert.alert('Message failed', err.message || 'Could not start conversation. Please try again.');
+      showAlert('Message failed', err.message || 'Could not start conversation. Please try again.');
     },
   });
 

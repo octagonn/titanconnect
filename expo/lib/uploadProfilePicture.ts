@@ -1,14 +1,22 @@
 //lib/uploadProfilePicture.ts
 import { supabase } from "@/lib/supabase";
 import * as FileSystem from "expo-file-system/legacy";
-import { Alert } from "react-native";
+import { Platform } from "react-native";
+import { showAlert } from "@/lib/alert";
 import { Buffer } from "buffer";
-// Uploads or updates a user's profile picture in Supabase Storage and 
+// Uploads or updates a user's profile picture in Supabase Storage and
 // returns the public URL whcih is then uploaded to the profiles table under column avatar_url
 export async function uploadProfilePicture(uri: string, userId: string) {
   try {
-    const base64 = await FileSystem.readAsStringAsync(uri, { encoding: "base64" });
-    const fileBytes = Buffer.from(base64, "base64");
+    let fileBytes: Buffer | Blob;
+    if (Platform.OS === "web") {
+      // expo-file-system is unavailable on web; the picker returns a blob:/data: URI
+      const response = await fetch(uri);
+      fileBytes = await response.blob();
+    } else {
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: "base64" });
+      fileBytes = Buffer.from(base64, "base64");
+    }
     const filePath = `${userId}.jpg`;
 
     const { data: existingFiles } = await supabase.storage
@@ -30,7 +38,7 @@ export async function uploadProfilePicture(uri: string, userId: string) {
     }
 
     if (error) {
-      Alert.alert("Upload Failed", error.message);
+      showAlert("Upload Failed", error.message);
       return null;
     }
 
@@ -40,7 +48,7 @@ export async function uploadProfilePicture(uri: string, userId: string) {
 
     return `${urlData.publicUrl}?v=${Date.now()}`;
   } catch (err: any) {
-    Alert.alert("Unexpected Error", err.message);
+    showAlert("Unexpected Error", err.message);
     return null;
   }
 }

@@ -2,26 +2,30 @@ import { Tabs } from "expo-router";
 import { Home, QrCode, Bell, User, MessageCircle, Users } from "lucide-react-native";
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSafeAreaInsets, EdgeInsets } from "react-native-safe-area-context";
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 
 import Colors from "@/constants/colors";
 import { useApp } from "@/contexts/AppContext";
 
+// Android's gesture/nav bar isn't reported through safe-area insets the same
+// way, so it keeps its historical fixed padding. iOS and web (incl. iOS
+// Safari, where env(safe-area-inset-bottom) reports the home-indicator
+// height once viewport-fit=cover is set — see app/+html.tsx) use the real inset.
+function getTabBarPaddingBottom(insets: EdgeInsets) {
+  return Platform.OS === 'android' ? 14 : Math.max(insets.bottom, 12);
+}
+
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const paddingBottom = Platform.OS === 'ios' ? Math.max(insets.bottom, 12) : 14;
-  const height = 64 + paddingBottom - 12; // 64 default + extra safe area
+  const paddingBottom = getTabBarPaddingBottom(insets);
 
+  // No fixed height: the bar sizes itself from its content (icon + label +
+  // item padding) plus the safe-area padding. A hardcoded height used to
+  // undercut the content by ~11px, clipping the bottom of the labels.
   return (
     <View
-      style={[
-        styles.tabBar,
-        {
-          paddingBottom,
-          height,
-        },
-      ]}
+      style={[styles.tabBar, { paddingBottom }]}
       pointerEvents="box-none"
     >
       {state.routes.map((route, index) => {
@@ -93,7 +97,6 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
 export default function TabLayout() {
   const { unreadCount } = useApp();
-  const insets = useSafeAreaInsets();
 
   return (
       <Tabs
@@ -108,9 +111,6 @@ export default function TabLayout() {
           headerTintColor: '#ffffff',
           headerTitleStyle: {
             fontWeight: '700' as const,
-          },
-          sceneContainerStyle: {
-            paddingBottom: 90,
           },
         }}
       >
@@ -174,10 +174,10 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+    // In normal flow (react-navigation's default footer layout) rather than
+    // absolute/fixed: iOS Safari anchors fixed elements to its layout
+    // viewport, which extends behind the bottom toolbar and clips the dock.
+    // A flow footer inside the 100dvh-bounded root can't be mis-anchored.
     flexDirection: 'row',
     alignItems: 'stretch',
     justifyContent: 'space-between',

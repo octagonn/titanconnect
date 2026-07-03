@@ -1,7 +1,8 @@
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Mail, RefreshCw, ArrowLeft } from 'lucide-react-native';
 import { useState, useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { showAlert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
@@ -31,17 +32,17 @@ export default function VerifyEmailScreen() {
 
   const handleResend = async () => {
     if (!email) {
-      Alert.alert('Email missing', 'Please go back and enter your email again.');
+      showAlert('Email missing', 'Please go back and enter your email again.');
       return;
     }
 
     setIsResending(true);
     try {
       await resendVerification(email);
-      Alert.alert('Verification email sent', `We’ve sent a new verification email to ${email}.`);
+      showAlert('Verification email sent', `We’ve sent a new verification email to ${email}.`);
     } catch (error) {
       console.error('Error resending verification email:', error);
-      Alert.alert('Failed to resend email', 'Please try again in a moment.');
+      showAlert('Failed to resend email', 'Please try again in a moment.');
     } finally {
       setIsResending(false);
     }

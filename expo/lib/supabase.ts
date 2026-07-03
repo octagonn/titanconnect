@@ -65,6 +65,26 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 /**
+ * Check whether an email already has an account, so the auth flow can route
+ * straight to sign-in vs sign-up. Backed by the `email_is_registered` RPC
+ * (see supabase/migrations) — fails closed to "not registered" so a lookup
+ * error just sends the user down the sign-up path, where they can still
+ * switch to sign-in manually.
+ */
+export async function checkEmailExists(email: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('email_is_registered', {
+    check_email: email.trim().toLowerCase(),
+  });
+
+  if (error) {
+    console.error('Error checking email existence:', error);
+    return false;
+  }
+
+  return !!data;
+}
+
+/**
  * Get the email verification redirect URL that will open the app
  * For development/testing: tries to use current Expo Go URL if available,
  * otherwise falls back to the app's custom URL scheme (myapp://)

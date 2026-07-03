@@ -1,20 +1,7 @@
 import { Heart, MessageCircle,Mail, BookOpenText, MessageCircleHeart, Plus, Image as ImageIcon, X, MoreHorizontal, Award, GraduationCap, University } from 'lucide-react-native';
 import { useState, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Image,
-  TextInput,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView } from 'react-native';
+import { showAlert } from '@/lib/alert';
 import * as ImagePicker from 'expo-image-picker';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,15 +11,6 @@ import { uploadImage } from '@/lib/storage';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import styles from '@/styles/home.styles';
-
-// Helper to show alerts safely on web
-const showAlert = (title: string, message: string) => {
-  if (Platform.OS === 'web') {
-    window.alert(`${title}: ${message}`);
-  } else {
-    Alert.alert(title, message);
-  }
-};
 
 export default function HomeScreen() {
   const { currentUser } = useAuth();
@@ -307,7 +285,7 @@ export default function HomeScreen() {
   };
 
   const handleDeletePost = (postId: string) => {
-    Alert.alert('Delete post?', 'This will remove the post and its comments.', [
+    showAlert('Delete post?', 'This will remove the post and its comments.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -333,7 +311,7 @@ export default function HomeScreen() {
   };
 
   const handleDeleteComment = (commentId: string) => {
-    Alert.alert('Delete comment?', 'This cannot be undone.', [
+    showAlert('Delete comment?', 'This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -1111,13 +1089,13 @@ export default function HomeScreen() {
                 onPress={async () => {
                   try {
                     await reportsMutation.mutateAsync({ userId: profileQuery.data.id });
-                    Alert.alert('Report submitted', 'Thank you. We will review.');
+                    showAlert('Report submitted', 'Thank you. We will review.');
                   } catch (err: any) {
                     const msg =
                       err?.message?.includes('cooldown') || err?.data?.code === 'TOO_MANY_REQUESTS'
                         ? 'You have recently reported this user. Please wait before reporting again.'
                         : 'Could not submit report.';
-                    Alert.alert('Report', msg);
+                    showAlert('Report', msg);
                   }
                 }}
               >

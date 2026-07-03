@@ -1,15 +1,8 @@
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useState, useMemo, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { Eye, EyeOff } from 'lucide-react-native';
+import { showAlert } from '@/lib/alert';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useResponsiveLayout } from '@/lib/responsive';
@@ -17,6 +10,7 @@ import { useResponsiveLayout } from '@/lib/responsive';
 type Params = {
   email?: string;
   role?: 'student' | 'faculty';
+  mode?: 'signin' | 'signup';
 };
 
 export default function EmailPasswordAuthScreen() {
@@ -44,16 +38,21 @@ export default function EmailPasswordAuthScreen() {
 
   const [email] = useState<string>(initialEmail);
   const [password, setPassword] = useState<string>('');
-  const [mode, setMode] = useState<'signup' | 'signin'>('signup');
+  // Welcome screen looks the email up and tells us which mode fits; default
+  // to sign-up if that param is missing (e.g. direct navigation).
+  const [mode, setMode] = useState<'signup' | 'signin'>(
+    params.mode === 'signin' ? 'signin' : 'signup'
+  );
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [showPassword, setShowPassword] = useState<boolean>(false);
 
   const handleSubmit = useCallback(async () => {
     if (!email) {
-      Alert.alert('Email required', 'Please go back and enter your email.');
+      showAlert('Email required', 'Please go back and enter your email.');
       return;
     }
     if (!password || password.length < 8) {
-      Alert.alert('Password too short', 'Please enter a password with at least 8 characters.');
+      showAlert('Password too short', 'Please enter a password with at least 8 characters.');
       return;
     }
 
@@ -77,11 +76,11 @@ export default function EmailPasswordAuthScreen() {
         }
 
         if (result.invalidCredentials) {
-          Alert.alert('Incorrect email or password', 'Double-check your credentials and try again.');
+          showAlert('Incorrect email or password', 'Double-check your credentials and try again.');
           return;
         }
 
-        Alert.alert('Sign in failed', 'Check your email/password or verify your email.');
+        showAlert('Sign in failed', 'Check your email/password or verify your email.');
         return;
       }
 
@@ -103,7 +102,7 @@ export default function EmailPasswordAuthScreen() {
         return;
       }
 
-      Alert.alert('Something went wrong', 'Please try again or come back later.');
+      showAlert('Something went wrong', 'Please try again or come back later.');
     } catch (error) {
       console.error('Error in email/password auth flow:', error);
 
@@ -118,11 +117,11 @@ export default function EmailPasswordAuthScreen() {
           message.includes('invalid credentials') ||
           message.includes('invalid password'))
       ) {
-        Alert.alert('Incorrect email or password', 'Double-check your credentials and try again.');
+        showAlert('Incorrect email or password', 'Double-check your credentials and try again.');
         return;
       }
 
-      Alert.alert('Something went wrong', 'Please try again or come back later.');
+      showAlert('Something went wrong', 'Please try again or come back later.');
     } finally {
       setIsSubmitting(false);
     }
@@ -163,17 +162,33 @@ export default function EmailPasswordAuthScreen() {
 
           <View style={styles.field}>
             <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder={mode === 'signup' ? 'Create a secure password' : 'Enter your password'}
-              placeholderTextColor={Colors.light.placeholder}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType="password"
-            />
+            <View style={styles.passwordRow}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder={mode === 'signup' ? 'Create a secure password' : 'Enter your password'}
+                placeholderTextColor={Colors.light.placeholder}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="password"
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword((prev) => !prev)}
+                style={styles.passwordToggle}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                testID="toggle-password-visibility"
+              >
+                {showPassword ? (
+                  <EyeOff size={20} color={Colors.light.textSecondary} />
+                ) : (
+                  <Eye size={20} color={Colors.light.textSecondary} />
+                )}
+              </TouchableOpacity>
+            </View>
             <Text style={styles.helperText}>
               At least 8 characters. {mode === 'signup'
                 ? 'You’ll use this password next time you sign in.'
@@ -283,6 +298,25 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 15,
     color: Colors.light.text,
+  },
+  passwordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.light.inputBackground,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: Colors.light.text,
+  },
+  passwordToggle: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   helperText: {
     marginTop: 6,

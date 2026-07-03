@@ -1,18 +1,6 @@
 import { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-  Image,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  Platform,
-  Alert,
-  Modal,
-  KeyboardAvoidingView,
-} from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Image, TextInput, TouchableOpacity, ScrollView, Platform, Modal, KeyboardAvoidingView } from 'react-native';
+import { showAlert } from '@/lib/alert';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Heart, MessageCircle, MoreHorizontal } from 'lucide-react-native';
 
@@ -121,7 +109,7 @@ export default function PostDetailScreen() {
 
   const handleDeletePost = () => {
     if (!post) return;
-    Alert.alert('Delete post?', 'This will remove the post and its comments.', [
+    showAlert('Delete post?', 'This will remove the post and its comments.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -147,7 +135,7 @@ export default function PostDetailScreen() {
 
   const handleDeleteComment = () => {
     if (!commentOptions) return;
-    Alert.alert('Delete comment?', 'This cannot be undone.', [
+    showAlert('Delete comment?', 'This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',

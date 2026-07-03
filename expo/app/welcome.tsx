@@ -17,10 +17,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
 import { useResponsiveLayout } from '@/lib/responsive';
+import { checkEmailExists } from '@/lib/supabase';
+import { showAlert } from '@/lib/alert';
 
 export default function WelcomeScreen() {
   const router = useRouter();
   const [email, setEmail] = useState<string>('');
+  const [isChecking, setIsChecking] = useState<boolean>(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(30));
   const { isSmallHeight, isLargeHeight, insets } = useResponsiveLayout();
@@ -40,11 +43,11 @@ export default function WelcomeScreen() {
     ]).start();
   }, [fadeAnim, slideAnim]);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     const normalizedEmail = email.trim().toLowerCase();
 
     if (!normalizedEmail) {
-      alert('Please enter your CSUF or Fullerton email');
+      showAlert('Email required', 'Please enter your CSUF or Fullerton email');
       return;
     }
 
@@ -57,13 +60,22 @@ export default function WelcomeScreen() {
     }
 
     if (!role) {
-      alert('Please use your CSUF or Fullerton email (@csu.fullerton.edu or @fullerton.edu)');
+      showAlert(
+        'Invalid email',
+        'Please use your CSUF or Fullerton email (@csu.fullerton.edu or @fullerton.edu)'
+      );
       return;
     }
 
+    setIsChecking(true);
+    // Recognized existing account -> sign-in; otherwise -> sign-up. If the
+    // lookup itself fails, default to sign-up (the screen still has a manual
+    // "Already have an account?" toggle as a fallback).
+    const exists = await checkEmailExists(normalizedEmail).finally(() => setIsChecking(false));
+
     router.push({
       pathname: '/auth/email-password',
-      params: { email: normalizedEmail, role },
+      params: { email: normalizedEmail, role, mode: exists ? 'signin' : 'signup' },
     });
   };
 
@@ -170,14 +182,16 @@ export default function WelcomeScreen() {
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.button, !email && styles.buttonDisabled]}
+                  style={[styles.button, (!email || isChecking) && styles.buttonDisabled]}
                   onPress={handleContinue}
-                  disabled={!email}
+                  disabled={!email || isChecking}
                   testID="continue-button"
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.buttonText}>Continue</Text>
-                  <ArrowRight size={20} color="#ffffff" style={styles.buttonIcon} />
+                  <Text style={styles.buttonText}>{isChecking ? 'Checking…' : 'Continue'}</Text>
+                  {!isChecking && (
+                    <ArrowRight size={20} color="#ffffff" style={styles.buttonIcon} />
+                  )}
                 </TouchableOpacity>
 
                 <View style={styles.disclaimerContainer}>
