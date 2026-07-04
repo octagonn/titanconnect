@@ -44,10 +44,20 @@ export const [AppContext, useApp] = createContextHook(() => {
   const connections = (connectionsQuery.data as ConnectionWithUser[] | undefined) ?? [];
   const conversations = (conversationsQuery.data as any[] | undefined) ?? [];
 
+  // Combined badge count for the notifications bell: incoming friend
+  // requests + unread messages (the same two categories the notifications
+  // screen lists).
+  const incomingRequestCount = useMemo(
+    () => connections.filter((c) => c.status === 'pending' && c.direction === 'incoming').length,
+    [connections]
+  );
+  const notificationCount = incomingRequestCount + unreadCount;
+
   return {
     connections,
     conversations,
     unreadCount,
+    notificationCount,
     connectionsQuery,
     conversationsQuery,
     sendMessage: (receiverId: string, content: string) =>

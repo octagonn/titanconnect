@@ -27,7 +27,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
-    fontWeight: "700" as const,
+    fontWeight: "900" as const,
     color: Colors.light.text,
   },
   link: {
@@ -37,6 +37,6 @@ const styles = StyleSheet.create({
   linkText: {
     fontSize: 14,
     color: Colors.light.primary,
-    fontWeight: "600" as const,
+    fontWeight: "800" as const,
   },
 });

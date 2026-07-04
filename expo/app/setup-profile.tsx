@@ -13,9 +13,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { User as UserIcon, GraduationCap, Calendar, Heart, FileText, Check, Sparkles, ChevronRight } from 'lucide-react-native';
-import Colors from '@/constants/colors';
+import Colors, { INK, palette } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useResponsiveLayout } from '@/lib/responsive';
+import HardShadow from '@/components/ui/HardShadow';
 
 const MAJORS = [
   // Arts
@@ -349,16 +350,19 @@ export default function SetupProfileScreen() {
               </View>
             </View>
 
-            <TouchableOpacity
-              style={[styles.button, !isValid && styles.buttonDisabled]}
-              onPress={handleComplete}
-              disabled={!isValid}
-              testID="complete-button"
-              activeOpacity={0.8}
-            >
-              <Sparkles size={20} color="#ffffff" style={styles.buttonIcon} />
-              <Text style={styles.buttonText}>Complete Setup</Text>
-            </TouchableOpacity>
+            <View style={styles.buttonWrap}>
+              {isValid && <HardShadow offset={5} radius={16} />}
+              <TouchableOpacity
+                style={[styles.button, !isValid && styles.buttonDisabled]}
+                onPress={handleComplete}
+                disabled={!isValid}
+                testID="complete-button"
+                activeOpacity={0.8}
+              >
+                <Sparkles size={20} color="#ffffff" style={styles.buttonIcon} strokeWidth={2.5} />
+                <Text style={styles.buttonText}>Complete Setup</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -390,15 +394,17 @@ const styles = StyleSheet.create({
   headerIconContainer: {
     width: 64,
     height: 64,
-    borderRadius: 32,
-    backgroundColor: Colors.light.qrBackground,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: INK,
+    backgroundColor: palette.skyBlue,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
   },
   title: {
     fontSize: 32,
-    fontWeight: '800' as const,
+    fontWeight: '900' as const,
     color: Colors.light.text,
     marginBottom: 8,
   },
@@ -409,7 +415,7 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: Colors.light.textSecondary,
     marginBottom: 20,
-    fontWeight: '500' as const,
+    fontWeight: '600' as const,
   },
   subtitleSmall: {
     fontSize: 15,
@@ -419,20 +425,22 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   progressBar: {
-    height: 6,
-    backgroundColor: Colors.light.backgroundSecondary,
-    borderRadius: 3,
+    height: 8,
+    backgroundColor: Colors.light.card,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: INK,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    backgroundColor: Colors.light.primary,
+    backgroundColor: palette.orange,
     borderRadius: 3,
   },
   progressText: {
     fontSize: 13,
     color: Colors.light.textSecondary,
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
   },
   form: {
     gap: 28,
@@ -447,7 +455,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 15,
-    fontWeight: '700' as const,
+    fontWeight: '800' as const,
     color: Colors.light.text,
   },
   required: {
@@ -456,16 +464,17 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.light.inputBackground,
+    backgroundColor: Colors.light.card,
     borderRadius: 14,
     paddingHorizontal: 16,
-    borderWidth: 2,
-    borderColor: Colors.light.border,
+    borderWidth: 2.5,
+    borderColor: INK,
   },
   input: {
     flex: 1,
     paddingVertical: 16,
     fontSize: 16,
+    fontWeight: '600' as const,
     color: Colors.light.text,
   },
   textArea: {
@@ -493,20 +502,19 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 18,
     paddingVertical: 12,
-    borderRadius: 24,
-    backgroundColor: Colors.light.backgroundSecondary,
+    borderRadius: 20,
+    backgroundColor: Colors.light.card,
     borderWidth: 2,
-    borderColor: Colors.light.border,
+    borderColor: INK,
     marginRight: 8,
   },
   chipSelected: {
-    backgroundColor: Colors.light.primary,
-    borderColor: Colors.light.primary,
+    backgroundColor: palette.blue,
   },
   chipText: {
     fontSize: 15,
     color: Colors.light.text,
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
   },
   chipTextSelected: {
     color: '#ffffff',
@@ -514,23 +522,22 @@ const styles = StyleSheet.create({
   chipIcon: {
     marginLeft: 2,
   },
+  buttonWrap: {
+    position: 'relative',
+    marginTop: 16,
+  },
   button: {
-    backgroundColor: Colors.light.primary,
+    backgroundColor: palette.orange,
     borderRadius: 16,
+    borderWidth: 2.5,
+    borderColor: INK,
     paddingVertical: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
-    shadowColor: Colors.light.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 4,
   },
   buttonDisabled: {
-    backgroundColor: Colors.light.border,
-    shadowOpacity: 0,
+    backgroundColor: '#D8D3E0',
   },
   buttonIcon: {
     marginRight: 8,
@@ -538,6 +545,6 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#ffffff',
     fontSize: 17,
-    fontWeight: '700' as const,
+    fontWeight: '900' as const,
   },
 });

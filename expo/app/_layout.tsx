@@ -5,6 +5,9 @@ import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { View, StyleSheet, Platform } from "react-native";
+import { enableScreens } from "react-native-screens";
+import { ThemeProvider, DefaultTheme } from "@react-navigation/native";
 import { AuthContext, useAuth } from "@/contexts/AuthContext";
 import { AppContext } from "@/contexts/AppContext";
 import Colors from "@/constants/colors";
@@ -13,11 +16,33 @@ import * as Linking from "expo-linking";
 import { supabase } from "@/lib/supabase";
 import { showAlert } from '@/lib/alert';
 import AddToHomeScreen from '@/components/AddToHomeScreen';
+import NeoHeaderBackground from '@/components/ui/NeoHeaderBackground';
+
+// react-native-screens is disabled by default on web, which makes
+// bottom-tabs render inactive tab scenes as plain stacked Views with no
+// hiding — visible through our transparent scene backgrounds. Enabling it
+// switches tabs to the RNS web Screen shim, which display:none's inactive
+// scenes. The root Stack's web implementation doesn't use RNS, so this only
+// affects tabs.
+if (Platform.OS === 'web') {
+  enableScreens(true);
+}
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
+
+// Navigation theme with a transparent background: react-navigation paints
+// theme.colors.background on scene wrappers that contentStyle/sceneStyle
+// can't reach, which would otherwise cover the flat cream canvas below.
+const navTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: 'transparent',
+  },
+};
 
 function RootLayoutNav() {
   const { isLoading, isAuthenticated, currentUser } = useAuth();
@@ -139,6 +164,7 @@ function RootLayoutNav() {
     const inTabsGroup = rootSegment === '(tabs)';
     const inChat = rootSegment === 'chat';
     const inProfile = rootSegment === 'profile';
+    const inNotifications = rootSegment === 'notifications';
     const inStudentOnboarding = rootSegment === 'setup-profile';
     const inFacultyOnboarding = rootSegment === 'setup-faculty';
     const inOnboarding = inStudentOnboarding || inFacultyOnboarding;
@@ -162,7 +188,7 @@ function RootLayoutNav() {
       return;
     }
 
-    if (isAuthenticated && !inTabsGroup && !inChat && !inProfile) {
+    if (isAuthenticated && !inTabsGroup && !inChat && !inProfile && !inNotifications) {
       router.replace('/(tabs)/home');
     }
   }, [isLoading, isAuthenticated, currentUser, segments, router]);
@@ -175,12 +201,20 @@ function RootLayoutNav() {
     <Stack
       screenOptions={{
         headerBackTitle: "Back",
+        // Solid navy masthead with a thick ink bottom edge.
+        headerBackground: () => <NeoHeaderBackground />,
         headerStyle: {
-          backgroundColor: Colors.light.primary,
+          backgroundColor: 'transparent',
         },
-        headerTintColor: '#ffffff',
+        headerTintColor: '#FFFFFF',
         headerTitleStyle: {
-          fontWeight: '700' as const,
+          fontWeight: '900' as const,
+          color: '#FFFFFF',
+        },
+        // Scenes are transparent so the flat cream canvas underneath shows
+        // through every screen.
+        contentStyle: {
+          backgroundColor: 'transparent',
         },
       }}
     >
@@ -200,6 +234,13 @@ function RootLayoutNav() {
           title: 'Chat',
         }}
       />
+      <Stack.Screen
+        name="notifications"
+        options={{
+          headerShown: true,
+          title: 'Notifications',
+        }}
+      />
     </Stack>
   );
 }
@@ -216,8 +257,12 @@ export default function RootLayout() {
           <AppContext>
             <GestureHandlerRootView style={{ flex: 1 }}>
               <SafeAreaProvider>
-                <RootLayoutNav />
-                <AddToHomeScreen />
+                <View style={styles.appBackground}>
+                  <ThemeProvider value={navTheme}>
+                    <RootLayoutNav />
+                  </ThemeProvider>
+                  <AddToHomeScreen />
+                </View>
               </SafeAreaProvider>
             </GestureHandlerRootView>
           </AppContext>
@@ -226,3 +271,10 @@ export default function RootLayout() {
     </trpc.Provider>
   );
 }
+
+const styles = StyleSheet.create({
+  appBackground: {
+    flex: 1,
+    backgroundColor: Colors.light.background,
+  },
+});

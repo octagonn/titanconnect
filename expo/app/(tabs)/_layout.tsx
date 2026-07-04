@@ -1,12 +1,34 @@
-import { Tabs } from "expo-router";
-import { Home, QrCode, Bell, User, MessageCircle, Users } from "lucide-react-native";
+import { Tabs, useRouter } from "expo-router";
+import { Compass, QrCode, Bell, User, MessageCircle, Search as SearchIcon } from "lucide-react-native";
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from "react-native";
 import { useSafeAreaInsets, EdgeInsets } from "react-native-safe-area-context";
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 
-import Colors from "@/constants/colors";
+import Colors, { INK, palette } from "@/constants/colors";
 import { useApp } from "@/contexts/AppContext";
+import NeoHeaderBackground from "@/components/ui/NeoHeaderBackground";
+
+function NotificationBell() {
+  const router = useRouter();
+  const { notificationCount } = useApp();
+
+  return (
+    <TouchableOpacity
+      onPress={() => router.push('/notifications')}
+      style={styles.bellButton}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      testID="notification-bell"
+    >
+      <Bell size={22} color="#FFFFFF" strokeWidth={2.5} />
+      {notificationCount > 0 && (
+        <View style={styles.bellBadge} pointerEvents="none">
+          <Text style={styles.badgeText}>{notificationCount > 9 ? '9+' : notificationCount}</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
 
 // Android's gesture/nav bar isn't reported through safe-area insets the same
 // way, so it keeps its historical fixed padding. iOS and web (incl. iOS
@@ -31,7 +53,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       {state.routes.map((route, index) => {
         const { options } = descriptors[route.key];
         const isFocused = state.index === index;
-        const color = isFocused ? Colors.light.primary : Colors.light.tabIconDefault;
+        const color = isFocused ? '#FFFFFF' : Colors.light.tabIconDefault;
 
         const onPress = () => {
           const event = navigation.emit({
@@ -60,7 +82,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             : route.name;
 
         const renderIcon = options.tabBarIcon
-          ? options.tabBarIcon({ focused: isFocused, color, size: 24 })
+          ? options.tabBarIcon({ focused: isFocused, color, size: 22 })
           : null;
 
         return (
@@ -76,18 +98,20 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             style={styles.tabItem}
             hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
           >
-            {renderIcon}
-            {typeof label === 'string' ? (
-              <Text
-                style={[styles.tabLabel, isFocused && styles.tabLabelActive]}
-                numberOfLines={1}
-                ellipsizeMode="clip"
-              >
-                {label}
-              </Text>
-            ) : (
-              label
-            )}
+            <View style={[styles.pill, isFocused && styles.pillActive]}>
+              {renderIcon}
+              {typeof label === 'string' ? (
+                <Text
+                  style={[styles.tabLabel, isFocused && styles.tabLabelActive]}
+                  numberOfLines={1}
+                  ellipsizeMode="clip"
+                >
+                  {label}
+                </Text>
+              ) : (
+                label
+              )}
+            </View>
           </TouchableOpacity>
         );
       })}
@@ -102,39 +126,51 @@ export default function TabLayout() {
       <Tabs
         tabBar={(props) => <CustomTabBar {...props} />}
         screenOptions={{
-          tabBarActiveTintColor: Colors.light.primary,
+          tabBarActiveTintColor: '#FFFFFF',
           tabBarInactiveTintColor: Colors.light.tabIconDefault,
+          // With animations, inactive scenes get an Animated activityState
+          // that react-native-screens' web Screen can't compare against 0,
+          // so they never get display:none — and transparent scenes then
+          // show stale tabs stacked beneath the active one.
+          animation: 'none',
           headerShown: true,
+          // Solid navy masthead with a thick ink bottom edge.
+          headerBackground: () => <NeoHeaderBackground />,
           headerStyle: {
-            backgroundColor: Colors.light.primary,
+            backgroundColor: 'transparent',
           },
-          headerTintColor: '#ffffff',
+          headerTintColor: '#FFFFFF',
           headerTitleStyle: {
-            fontWeight: '700' as const,
+            fontWeight: '900' as const,
+            color: '#FFFFFF',
+          },
+          // Transparent scenes let the flat cream canvas underneath show through.
+          sceneStyle: {
+            backgroundColor: 'transparent',
           },
         }}
       >
       <Tabs.Screen
         name="home"
         options={{
-          title: "TitanConnect",
-          tabBarLabel: "Home",
-          tabBarIcon: ({ color }) => <Home size={24} color={color} />,
+          title: "Discover",
+          tabBarLabel: "Discover",
+          tabBarIcon: ({ color }) => <Compass size={22} color={color} strokeWidth={2.5} />,
+          headerRight: () => <NotificationBell />,
         }}
       />
       <Tabs.Screen
-        name="friends"
+        name="search"
         options={{
-          title: "Friends",
-          tabBarLabel: "Friends",
-          tabBarIcon: ({ color }) => <Users size={24} color={color} />,
+          title: "Search",
+          tabBarIcon: ({ color }) => <SearchIcon size={22} color={color} strokeWidth={2.5} />,
         }}
       />
       <Tabs.Screen
         name="tap-in"
         options={{
           title: "Tap-In",
-          tabBarIcon: ({ color }) => <QrCode size={24} color={color} />,
+          tabBarIcon: ({ color }) => <QrCode size={22} color={color} strokeWidth={2.5} />,
         }}
       />
       <Tabs.Screen
@@ -143,7 +179,7 @@ export default function TabLayout() {
           title: "Messages",
           tabBarIcon: ({ color }) => (
             <View pointerEvents="box-none">
-              <MessageCircle size={24} color={color} />
+              <MessageCircle size={22} color={color} strokeWidth={2.5} />
               {unreadCount > 0 && (
                 <View style={styles.badge} pointerEvents="none">
                   <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
@@ -154,18 +190,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="notifications"
-        options={{
-          title: "Notifications",
-          tabBarLabel: "Alerts",
-          tabBarIcon: ({ color }) => <Bell size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color }) => <User size={24} color={color} />,
+          tabBarIcon: ({ color }) => <User size={22} color={color} strokeWidth={2.5} />,
         }}
       />
       </Tabs>
@@ -181,30 +209,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'stretch',
     justifyContent: 'space-between',
-    backgroundColor: Colors.light.background,
-    borderTopWidth: 1,
-    borderTopColor: Colors.light.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 10,
+    backgroundColor: Colors.light.card,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderTopWidth: 3,
+    borderColor: INK,
     zIndex: 50,
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 10,
+    paddingVertical: 8,
+  },
+  pill: {
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  pillActive: {
+    backgroundColor: palette.orange,
+    borderWidth: 2,
+    borderColor: INK,
   },
   tabLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: Colors.light.tabIconDefault,
-    fontWeight: '600' as const,
+    fontWeight: '800' as const,
   },
   tabLabelActive: {
-    color: Colors.light.primary,
+    color: '#FFFFFF',
   },
   badge: {
     position: 'absolute',
@@ -212,6 +248,8 @@ const styles = StyleSheet.create({
     right: -6,
     backgroundColor: Colors.light.error,
     borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: INK,
     minWidth: 16,
     height: 16,
     alignItems: 'center',
@@ -221,6 +259,24 @@ const styles = StyleSheet.create({
   badgeText: {
     color: '#ffffff',
     fontSize: 10,
-    fontWeight: '700' as const,
+    fontWeight: '900' as const,
+  },
+  bellButton: {
+    marginRight: 16,
+    position: 'relative',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -8,
+    backgroundColor: Colors.light.error,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: INK,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
   },
 });

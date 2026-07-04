@@ -4,9 +4,11 @@ import { showAlert } from '@/lib/alert';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Heart, MessageCircle, MoreHorizontal } from 'lucide-react-native';
 
-import Colors from '@/constants/colors';
+import Colors, { INK } from '@/constants/colors';
 import { trpc } from '@/lib/trpc';
 import { useAuth } from '@/contexts/AuthContext';
+import Avatar from '@/components/ui/Avatar';
+import HardShadow from '@/components/ui/HardShadow';
 
 export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
@@ -177,12 +179,11 @@ export default function PostDetailScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+      <View style={styles.postCardWrap}>
+      <HardShadow offset={8} radius={24} />
       <View style={styles.postCard}>
         <View style={styles.postHeader}>
-          <Image
-            source={{ uri: post.userAvatar || 'https://i.pravatar.cc/150?img=0' }}
-            style={styles.avatar}
-          />
+          <Avatar uri={post.userAvatar} name={post.userName} size={44} />
           <View style={styles.postHeaderText}>
             <Text style={styles.userName}>{post.userName}</Text>
             <Text style={styles.timeAgo}>{getTimeAgo(post.createdAt)}</Text>
@@ -210,6 +211,7 @@ export default function PostDetailScreen() {
               size={20}
               color={isLiked ? Colors.light.error : Colors.light.textSecondary}
               fill={isLiked ? Colors.light.error : 'transparent'}
+              strokeWidth={2.5}
             />
             <Text style={[styles.actionText, isLiked && styles.actionTextActive]}>
               {post.likes}
@@ -217,12 +219,15 @@ export default function PostDetailScreen() {
           </TouchableOpacity>
 
           <View style={styles.actionButton}>
-            <MessageCircle size={20} color={Colors.light.textSecondary} />
+            <MessageCircle size={20} color={Colors.light.textSecondary} strokeWidth={2.5} />
             <Text style={styles.actionText}>{post.comments.length}</Text>
           </View>
         </View>
       </View>
+      </View>
 
+      <View style={styles.commentsSectionWrap}>
+      <HardShadow offset={6} radius={20} />
       <View style={styles.commentsSection}>
         <Text style={styles.commentsTitle}>Comments</Text>
 
@@ -231,10 +236,7 @@ export default function PostDetailScreen() {
         ) : (
           post.comments.map((comment) => (
             <View key={comment.id} style={styles.comment}>
-              <Image
-                source={{ uri: comment.userAvatar || 'https://i.pravatar.cc/150?img=0' }}
-                style={styles.commentAvatar}
-              />
+              <Avatar uri={comment.userAvatar} name={comment.userName} size={32} />
               <View style={styles.commentContent}>
                 <Text style={styles.commentUserName}>{comment.userName}</Text>
                 <Text style={styles.commentText}>{comment.content}</Text>
@@ -250,6 +252,7 @@ export default function PostDetailScreen() {
             </View>
           ))
         )}
+      </View>
       </View>
 
       <Modal
@@ -315,20 +318,25 @@ export default function PostDetailScreen() {
               multiline
             />
             <View style={styles.editModalActions}>
-              <TouchableOpacity
-                style={[
-                  styles.postButton,
-                  (!editPostContent.trim() || updatePostMutation.isPending) && styles.postButtonDisabled,
-                ]}
-                onPress={handleUpdatePost}
-                disabled={!editPostContent.trim() || updatePostMutation.isPending}
-              >
-                {updatePostMutation.isPending ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.postButtonText}>Save</Text>
+              <View style={styles.postButtonWrap}>
+                {!(!editPostContent.trim() || updatePostMutation.isPending) && (
+                  <HardShadow offset={5} radius={18} />
                 )}
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.postButton,
+                    (!editPostContent.trim() || updatePostMutation.isPending) && styles.postButtonDisabled,
+                  ]}
+                  onPress={handleUpdatePost}
+                  disabled={!editPostContent.trim() || updatePostMutation.isPending}
+                >
+                  {updatePostMutation.isPending ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.postButtonText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -396,20 +404,25 @@ export default function PostDetailScreen() {
               multiline
             />
             <View style={styles.editModalActions}>
-              <TouchableOpacity
-                style={[
-                  styles.postButton,
-                  (!editCommentContent.trim() || updateCommentMutation.isPending) && styles.postButtonDisabled,
-                ]}
-                onPress={handleUpdateComment}
-                disabled={!editCommentContent.trim() || updateCommentMutation.isPending}
-              >
-                {updateCommentMutation.isPending ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.postButtonText}>Save</Text>
+              <View style={styles.postButtonWrap}>
+                {!(!editCommentContent.trim() || updateCommentMutation.isPending) && (
+                  <HardShadow offset={5} radius={18} />
                 )}
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.postButton,
+                    (!editCommentContent.trim() || updateCommentMutation.isPending) && styles.postButtonDisabled,
+                  ]}
+                  onPress={handleUpdateComment}
+                  disabled={!editCommentContent.trim() || updateCommentMutation.isPending}
+                >
+                  {updateCommentMutation.isPending ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.postButtonText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -474,6 +487,7 @@ const styles = StyleSheet.create({
   },
   messageText: {
     fontSize: 16,
+    fontWeight: '700' as const,
     color: Colors.light.textSecondary,
     textAlign: 'center',
     marginBottom: 12,
@@ -481,26 +495,29 @@ const styles = StyleSheet.create({
   retryButton: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: 14,
+    borderWidth: 2.5,
+    borderColor: INK,
     backgroundColor: Colors.light.primary,
   },
   retryText: {
     color: '#ffffff',
-    fontWeight: '600' as const,
+    fontWeight: '900' as const,
+  },
+  postCardWrap: {
+    position: 'relative',
   },
   postCard: {
     backgroundColor: Colors.light.card,
-    borderRadius: 12,
+    borderRadius: 24,
+    borderWidth: 3,
+    borderColor: INK,
     padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   postHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
     marginBottom: 12,
   },
   modalHeader: {
@@ -511,34 +528,31 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '700' as const,
+    fontWeight: '900' as const,
     color: Colors.light.text,
   },
   modalClose: {
     fontSize: 16,
+    fontWeight: '800' as const,
     color: Colors.light.textSecondary,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
   },
   postHeaderText: {
     flex: 1,
   },
   userName: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '900' as const,
     color: Colors.light.text,
   },
   timeAgo: {
     fontSize: 12,
+    fontWeight: '600' as const,
     color: Colors.light.textSecondary,
     marginTop: 2,
   },
   postContent: {
     fontSize: 15,
+    fontWeight: '600' as const,
     color: Colors.light.text,
     lineHeight: 22,
     marginBottom: 12,
@@ -546,7 +560,9 @@ const styles = StyleSheet.create({
   postImage: {
     width: '100%',
     height: 260,
-    borderRadius: 8,
+    borderRadius: 16,
+    borderWidth: 2.5,
+    borderColor: INK,
     marginBottom: 12,
     backgroundColor: Colors.light.backgroundSecondary,
   },
@@ -554,34 +570,42 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 16,
     paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.light.border,
+    borderTopWidth: 2.5,
+    borderTopColor: INK,
   },
   postInput: {
-    backgroundColor: Colors.light.inputBackground,
-    borderRadius: 12,
+    backgroundColor: Colors.light.card,
+    borderWidth: 2.5,
+    borderColor: INK,
+    borderRadius: 18,
     padding: 16,
     fontSize: 16,
+    fontWeight: '600' as const,
     color: Colors.light.text,
     minHeight: 120,
     textAlignVertical: 'top',
     marginBottom: 16,
   },
+  postButtonWrap: {
+    position: 'relative',
+  },
   postButton: {
     backgroundColor: Colors.light.primary,
-    borderRadius: 12,
+    borderRadius: 18,
+    borderWidth: 2.5,
+    borderColor: INK,
     paddingVertical: 14,
     paddingHorizontal: 32,
     alignItems: 'center',
     minWidth: 100,
   },
   postButtonDisabled: {
-    backgroundColor: Colors.light.border,
+    backgroundColor: '#C7C2D6',
   },
   postButtonText: {
     color: '#ffffff',
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '900' as const,
   },
   actionButton: {
     flexDirection: 'row',
@@ -591,25 +615,31 @@ const styles = StyleSheet.create({
   actionText: {
     fontSize: 14,
     color: Colors.light.textSecondary,
-    fontWeight: '500' as const,
+    fontWeight: '800' as const,
   },
   actionTextActive: {
     color: Colors.light.error,
   },
+  commentsSectionWrap: {
+    position: 'relative',
+  },
   commentsSection: {
     backgroundColor: Colors.light.card,
-    borderRadius: 12,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: INK,
     padding: 16,
     gap: 12,
   },
   commentsTitle: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '900' as const,
     color: Colors.light.text,
     marginBottom: 4,
   },
   noCommentsText: {
     fontSize: 14,
+    fontWeight: '600' as const,
     color: Colors.light.textSecondary,
   },
   comment: {
@@ -617,25 +647,23 @@ const styles = StyleSheet.create({
     gap: 8,
     position: 'relative',
   },
-  commentAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
   commentContent: {
     flex: 1,
-    backgroundColor: Colors.light.backgroundSecondary,
-    borderRadius: 12,
+    backgroundColor: Colors.light.background,
+    borderWidth: 2,
+    borderColor: INK,
+    borderRadius: 14,
     padding: 10,
   },
   commentUserName: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '900' as const,
     color: Colors.light.text,
     marginBottom: 4,
   },
   commentText: {
     fontSize: 14,
+    fontWeight: '500' as const,
     color: Colors.light.text,
     lineHeight: 20,
   },
@@ -650,24 +678,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
-    backgroundColor: Colors.light.background,
+    backgroundColor: Colors.light.card,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.light.border,
+    borderTopWidth: 3,
+    borderColor: INK,
   },
   commentInput: {
     flex: 1,
-    backgroundColor: Colors.light.inputBackground,
-    borderRadius: 20,
+    backgroundColor: Colors.light.background,
+    borderWidth: 2,
+    borderColor: INK,
+    borderRadius: 18,
     paddingHorizontal: 16,
     paddingVertical: Platform.OS === 'web' ? 6 : 8,
     fontSize: 14,
+    fontWeight: '600' as const,
     color: Colors.light.text,
   },
   commentSubmit: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '900' as const,
     color: Colors.light.primary,
   },
   commentSubmitDisabled: {
@@ -678,14 +709,16 @@ const styles = StyleSheet.create({
   },
   optionsOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(22,13,40,0.5)',
     justifyContent: 'flex-end',
   },
   optionsCard: {
     backgroundColor: Colors.light.card,
     padding: 16,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderTopWidth: 3,
+    borderColor: INK,
     gap: 8,
   },
   optionsItem: {
@@ -694,12 +727,12 @@ const styles = StyleSheet.create({
   optionsItemText: {
     fontSize: 16,
     color: Colors.light.text,
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
   },
   optionsItemDestructive: {
     fontSize: 16,
     color: Colors.light.error,
-    fontWeight: '700' as const,
+    fontWeight: '900' as const,
   },
   optionsCancel: {
     paddingVertical: 12,
@@ -707,13 +740,15 @@ const styles = StyleSheet.create({
   optionsCancelText: {
     fontSize: 16,
     color: Colors.light.textSecondary,
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
     textAlign: 'center',
   },
   editModalContent: {
-    backgroundColor: Colors.light.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: Colors.light.card,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    borderTopWidth: 3,
+    borderColor: INK,
     padding: 24,
   },
   editModalActions: {

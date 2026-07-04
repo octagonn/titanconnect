@@ -12,9 +12,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Briefcase, Building2, FileText, Sparkles } from 'lucide-react-native';
-import Colors from '@/constants/colors';
+import Colors, { INK, palette } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useResponsiveLayout } from '@/lib/responsive';
+import HardShadow from '@/components/ui/HardShadow';
 
 export default function SetupFacultyScreen() {
   const router = useRouter();
@@ -178,15 +179,18 @@ export default function SetupFacultyScreen() {
               </View>
             </View>
 
-            <TouchableOpacity
-              style={[styles.button, !isValid && styles.buttonDisabled]}
-              onPress={handleComplete}
-              disabled={!isValid}
-              activeOpacity={0.85}
-            >
-              <Sparkles size={20} color="#ffffff" style={styles.buttonIcon} />
-              <Text style={styles.buttonText}>Complete Faculty Setup</Text>
-            </TouchableOpacity>
+            <View style={styles.buttonWrap}>
+              {isValid && <HardShadow offset={5} radius={16} />}
+              <TouchableOpacity
+                style={[styles.button, !isValid && styles.buttonDisabled]}
+                onPress={handleComplete}
+                disabled={!isValid}
+                activeOpacity={0.85}
+              >
+                <Sparkles size={20} color="#ffffff" style={styles.buttonIcon} strokeWidth={2.5} />
+                <Text style={styles.buttonText}>Complete Faculty Setup</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -215,20 +219,23 @@ const styles = StyleSheet.create({
   headerIconContainer: {
     width: 64,
     height: 64,
-    borderRadius: 32,
-    backgroundColor: Colors.light.qrBackground,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: INK,
+    backgroundColor: palette.skyBlue,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
   },
   title: {
     fontSize: 28,
-    fontWeight: '800' as const,
+    fontWeight: '900' as const,
     color: Colors.light.text,
     marginBottom: 6,
   },
   subtitle: {
     fontSize: 15,
+    fontWeight: '600' as const,
     color: Colors.light.textSecondary,
     marginBottom: 4,
   },
@@ -245,7 +252,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 15,
-    fontWeight: '700' as const,
+    fontWeight: '800' as const,
     color: Colors.light.text,
   },
   required: {
@@ -254,39 +261,39 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.light.inputBackground,
+    backgroundColor: Colors.light.card,
     borderRadius: 14,
     paddingHorizontal: 16,
-    borderWidth: 2,
-    borderColor: Colors.light.border,
+    borderWidth: 2.5,
+    borderColor: INK,
   },
   input: {
     flex: 1,
     paddingVertical: 14,
     fontSize: 16,
+    fontWeight: '600' as const,
     color: Colors.light.text,
   },
   textArea: {
     minHeight: 100,
     paddingTop: 16,
   },
+  buttonWrap: {
+    position: 'relative',
+    marginTop: 8,
+  },
   button: {
-    backgroundColor: Colors.light.primary,
+    backgroundColor: palette.orange,
     borderRadius: 16,
+    borderWidth: 2.5,
+    borderColor: INK,
     paddingVertical: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
-    shadowColor: Colors.light.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 4,
   },
   buttonDisabled: {
-    backgroundColor: Colors.light.border,
-    shadowOpacity: 0,
+    backgroundColor: '#D8D3E0',
   },
   buttonIcon: {
     marginRight: 8,
@@ -294,7 +301,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#ffffff',
     fontSize: 17,
-    fontWeight: '700' as const,
+    fontWeight: '900' as const,
   },
 });
 

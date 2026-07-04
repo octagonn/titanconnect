@@ -1,13 +1,17 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { QrCode, Scan, Users } from 'lucide-react-native';
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, Image } from 'react-native';
 import { showAlert } from '@/lib/alert';
-import Colors from '@/constants/colors';
+import Colors, { INK, palette } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { trpc } from '@/lib/trpc';
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
+import HardShadow from '@/components/ui/HardShadow';
+import StatTile from '@/components/ui/StatTile';
+import SegmentedControl from '@/components/ui/SegmentedControl';
+import Button from '@/components/ui/Button';
 
 type TabType = 'qr' | 'scan';
 
@@ -30,6 +34,8 @@ export default function TapInScreen() {
   const [showScanner, setShowScanner] = useState<boolean>(false);
   const [permission, requestPermission] = useCameraPermissions();
   const [token, setToken] = useState<string | null>(null);
+  const [qrError, setQrError] = useState<boolean>(false);
+  const hasAttemptedToken = useRef(false);
 
   const handleScan = async (data: string) => {
     try {
@@ -81,9 +87,20 @@ export default function TapInScreen() {
   }, [connectionsQuery.data, currentUser]);
 
   const ensureToken = useCallback(async () => {
-    if (token || qrToken.isPending) return;
-    const res = await qrToken.mutateAsync();
-    setToken(res.token);
+    // Guard with a ref (not just `token`/`isPending` state) so a failed
+    // attempt can't retry forever: every mutateAsync call — success or
+    // failure — changes the mutation object's identity, which would
+    // otherwise recreate this callback and re-fire the effect below,
+    // hammering the server with retries on every render.
+    if (token || hasAttemptedToken.current) return;
+    hasAttemptedToken.current = true;
+    try {
+      const res = await qrToken.mutateAsync();
+      setToken(res.token);
+    } catch (error) {
+      console.error('Failed to get QR token:', error);
+      setQrError(true);
+    }
   }, [qrToken, token]);
 
   useEffect(() => {
@@ -113,35 +130,19 @@ export default function TapInScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.statsContainer}>
-        <View style={styles.statCard}>
-          <Users size={32} color={Colors.light.primary} />
-          <Text style={styles.statNumber}>{connectionCount}</Text>
-          <Text style={styles.statLabel}>Connections</Text>
-        </View>
+        <StatTile icon={Users} value={String(connectionCount)} label="CONNECTIONS" color={palette.skyBlue} />
       </View>
 
       <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'qr' && styles.tabActive]}
-          onPress={() => setActiveTab('qr')}
-          testID="tab-qr"
-        >
-          <QrCode size={20} color={activeTab === 'qr' ? Colors.light.primary : Colors.light.textSecondary} />
-          <Text style={[styles.tabText, activeTab === 'qr' && styles.tabTextActive]}>
-            My QR Code
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'scan' && styles.tabActive]}
-          onPress={() => setActiveTab('scan')}
-          testID="tab-scan"
-        >
-          <Scan size={20} color={activeTab === 'scan' ? Colors.light.primary : Colors.light.textSecondary} />
-          <Text style={[styles.tabText, activeTab === 'scan' && styles.tabTextActive]}>
-            Scan QR
-          </Text>
-        </TouchableOpacity>
+        <SegmentedControl
+          items={[
+            { key: 'qr', label: 'My QR Code', icon: QrCode },
+            { key: 'scan', label: 'Scan QR', icon: Scan },
+          ]}
+          value={activeTab}
+          onChange={(key) => setActiveTab(key as TabType)}
+          activeColor={palette.orange}
+        />
       </View>
 
       <ScrollView
@@ -152,38 +153,46 @@ export default function TapInScreen() {
         {activeTab === 'qr' ? (
           <View style={styles.sectionStack}>
             <View style={styles.qrContainer}>
-            <View style={styles.qrCodePlaceholder}>
-              {qrData ? (
-                <>
-                  <Image source={{ uri: qrData.url }} style={styles.qrImage} />
-                  <Text style={styles.qrUserId}>{qrData.payload}</Text>
-                </>
-              ) : (
-                <Text style={styles.qrUserId}>Generating...</Text>
-              )}
-            </View>
+              <View style={styles.qrWrap}>
+                <HardShadow offset={8} radius={24} />
+                <View style={styles.qrCodePlaceholder}>
+                  {qrData ? (
+                    <>
+                      <Image source={{ uri: qrData.url }} style={styles.qrImage} />
+                      <Text style={styles.qrUserId}>{qrData.payload}</Text>
+                    </>
+                  ) : qrError ? (
+                    <Text style={styles.qrUserId}>QR code unavailable right now. Please try again later.</Text>
+                  ) : (
+                    <Text style={styles.qrUserId}>Generating...</Text>
+                  )}
+                </View>
+              </View>
             </View>
 
-            <View style={styles.instructionsCard}>
-              <Text style={styles.instructionsTitle}>How to Tap-In</Text>
-              <View style={styles.instructionsList}>
-                <View style={styles.instructionItem}>
-                  <View style={styles.instructionNumber}>
-                    <Text style={styles.instructionNumberText}>1</Text>
+            <View style={styles.instructionsWrap}>
+              <HardShadow offset={6} radius={20} />
+              <View style={styles.instructionsCard}>
+                <Text style={styles.instructionsTitle}>How to Tap-In</Text>
+                <View style={styles.instructionsList}>
+                  <View style={styles.instructionItem}>
+                    <View style={styles.instructionNumber}>
+                      <Text style={styles.instructionNumberText}>1</Text>
+                    </View>
+                    <Text style={styles.instructionText}>Show your QR code to another student</Text>
                   </View>
-                  <Text style={styles.instructionText}>Show your QR code to another student</Text>
-                </View>
-                <View style={styles.instructionItem}>
-                  <View style={styles.instructionNumber}>
-                    <Text style={styles.instructionNumberText}>2</Text>
+                  <View style={styles.instructionItem}>
+                    <View style={styles.instructionNumber}>
+                      <Text style={styles.instructionNumberText}>2</Text>
+                    </View>
+                    <Text style={styles.instructionText}>They scan it with their camera</Text>
                   </View>
-                  <Text style={styles.instructionText}>They scan it with their camera</Text>
-                </View>
-                <View style={styles.instructionItem}>
-                  <View style={styles.instructionNumber}>
-                    <Text style={styles.instructionNumberText}>3</Text>
+                  <View style={styles.instructionItem}>
+                    <View style={styles.instructionNumber}>
+                      <Text style={styles.instructionNumberText}>3</Text>
+                    </View>
+                    <Text style={styles.instructionText}>You&apos;re instantly connected!</Text>
                   </View>
-                  <Text style={styles.instructionText}>You&apos;re instantly connected!</Text>
                 </View>
               </View>
             </View>
@@ -192,27 +201,24 @@ export default function TapInScreen() {
           <View style={styles.sectionStack}>
             <View style={styles.scanContainer}>
               <View style={styles.scanPlaceholder}>
-                <Scan size={64} color={Colors.light.primary} />
+                <Scan size={64} color={INK} strokeWidth={2} />
                 <Text style={styles.scanTitle}>Scan a QR Code</Text>
                 <Text style={styles.scanSubtitle}>
                   Point your camera at another student&apos;s QR code
                 </Text>
-                <TouchableOpacity
-                  style={styles.scanButton}
-                  onPress={handleScanPress}
-                  testID="open-scanner-button"
-                >
-                  <Text style={styles.scanButtonText}>Open Camera</Text>
-                </TouchableOpacity>
+                <Button label="Open Camera" onPress={handleScanPress} color={palette.blue} />
               </View>
             </View>
 
-            <View style={styles.tipsCard}>
-              <Text style={styles.tipsTitle}>Scanning Tips</Text>
-              <Text style={styles.tipText}>• Hold your phone steady</Text>
-              <Text style={styles.tipText}>• Ensure good lighting</Text>
-              <Text style={styles.tipText}>• Keep the QR code centered</Text>
-              <Text style={styles.tipText}>• Works best at arm&apos;s length</Text>
+            <View style={styles.tipsWrap}>
+              <HardShadow offset={5} radius={18} />
+              <View style={styles.tipsCard}>
+                <Text style={styles.tipsTitle}>Scanning Tips</Text>
+                <Text style={styles.tipText}>• Hold your phone steady</Text>
+                <Text style={styles.tipText}>• Ensure good lighting</Text>
+                <Text style={styles.tipText}>• Keep the QR code centered</Text>
+                <Text style={styles.tipText}>• Works best at arm&apos;s length</Text>
+              </View>
             </View>
           </View>
         )}
@@ -250,62 +256,15 @@ export default function TapInScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.light.background,
+    backgroundColor: Colors.light.feedBackground,
   },
   statsContainer: {
     padding: 20,
     alignItems: 'center',
   },
-  statCard: {
-    backgroundColor: Colors.light.card,
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    minWidth: 160,
-  },
-  statNumber: {
-    fontSize: 40,
-    fontWeight: '700' as const,
-    color: Colors.light.primary,
-    marginVertical: 8,
-  },
-  statLabel: {
-    fontSize: 16,
-    color: Colors.light.textSecondary,
-    fontWeight: '500' as const,
-  },
   tabContainer: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.light.border,
-    backgroundColor: Colors.light.background,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    gap: 8,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  tabActive: {
-    borderBottomColor: Colors.light.primary,
-  },
-  tabText: {
-    fontSize: 16,
-    fontWeight: '500' as const,
-    color: Colors.light.textSecondary,
-  },
-  tabTextActive: {
-    color: Colors.light.primary,
-    fontWeight: '600' as const,
+    marginHorizontal: 16,
+    marginBottom: 4,
   },
   content: {
     flex: 1,
@@ -326,17 +285,18 @@ const styles = StyleSheet.create({
   qrContainer: {
     alignItems: 'center',
   },
+  qrWrap: {
+    position: 'relative',
+    width: '100%',
+  },
   qrCodePlaceholder: {
     backgroundColor: Colors.light.qrBackground,
     borderRadius: 24,
+    borderWidth: 3,
+    borderColor: INK,
     padding: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
   },
   qrImage: {
     width: 240,
@@ -344,27 +304,30 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     backgroundColor: '#fff',
     borderRadius: 12,
+    borderWidth: 2,
+    borderColor: INK,
   },
   qrUserId: {
     marginTop: 16,
     fontSize: 12,
+    fontWeight: '700' as const,
     color: Colors.light.textSecondary,
     fontFamily: 'monospace' as const,
     letterSpacing: 2,
   },
+  instructionsWrap: {
+    position: 'relative',
+  },
   instructionsCard: {
     backgroundColor: Colors.light.card,
-    borderRadius: 16,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: INK,
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   instructionsTitle: {
     fontSize: 18,
-    fontWeight: '700' as const,
+    fontWeight: '900' as const,
     color: Colors.light.text,
     marginBottom: 16,
   },
@@ -379,19 +342,22 @@ const styles = StyleSheet.create({
   instructionNumber: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.light.primary,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: INK,
+    backgroundColor: palette.blue,
     alignItems: 'center',
     justifyContent: 'center',
   },
   instructionNumberText: {
     color: '#ffffff',
     fontSize: 16,
-    fontWeight: '700' as const,
+    fontWeight: '900' as const,
   },
   instructionText: {
     flex: 1,
     fontSize: 15,
+    fontWeight: '600' as const,
     color: Colors.light.text,
     lineHeight: 22,
   },
@@ -404,44 +370,40 @@ const styles = StyleSheet.create({
   scanPlaceholder: {
     alignItems: 'center',
     padding: 32,
+    gap: 8,
   },
   scanTitle: {
     fontSize: 24,
-    fontWeight: '700' as const,
+    fontWeight: '900' as const,
     color: Colors.light.text,
-    marginTop: 24,
-    marginBottom: 8,
+    marginTop: 16,
   },
   scanSubtitle: {
     fontSize: 16,
+    fontWeight: '600' as const,
     color: Colors.light.textSecondary,
     textAlign: 'center',
-    marginBottom: 32,
+    marginBottom: 16,
   },
-  scanButton: {
-    backgroundColor: Colors.light.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 48,
-  },
-  scanButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600' as const,
+  tipsWrap: {
+    position: 'relative',
   },
   tipsCard: {
-    backgroundColor: Colors.light.backgroundSecondary,
-    borderRadius: 12,
+    backgroundColor: Colors.light.card,
+    borderRadius: 18,
+    borderWidth: 2.5,
+    borderColor: INK,
     padding: 20,
   },
   tipsTitle: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '900' as const,
     color: Colors.light.text,
     marginBottom: 12,
   },
   tipText: {
     fontSize: 14,
+    fontWeight: '600' as const,
     color: Colors.light.textSecondary,
     marginBottom: 8,
     lineHeight: 20,
@@ -455,27 +417,29 @@ const styles = StyleSheet.create({
   },
   scannerOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(22, 13, 40, 0.5)',
     justifyContent: 'space-between',
     padding: 20,
   },
   scannerText: {
     color: '#ffffff',
     fontSize: 18,
-    fontWeight: '600' as const,
+    fontWeight: '900' as const,
     textAlign: 'center',
     marginTop: 60,
   },
   cancelButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 3,
+    borderColor: INK,
+    borderRadius: 16,
     paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 40,
   },
   cancelButtonText: {
-    color: '#ffffff',
+    color: INK,
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '900' as const,
   },
 });

@@ -5,9 +5,10 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-nati
 import { showAlert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import Colors from '@/constants/colors';
+import Colors, { INK, palette } from '@/constants/colors';
 import { useResponsiveLayout } from '@/lib/responsive';
 import { useAuth } from '@/contexts/AuthContext';
+import HardShadow from '@/components/ui/HardShadow';
 
 type Params = {
   email?: string;
@@ -71,7 +72,7 @@ export default function VerifyEmailScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#00274C', '#003d73', '#0066CC']}
+        colors={[palette.navy, palette.blue, palette.skyBlue]}
         style={styles.gradientBackground}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -93,34 +94,40 @@ export default function VerifyEmailScreen() {
 
           <Text style={styles.subtitle}>{subtitle}</Text>
 
-          <View style={styles.infoCard}>
-            <View style={styles.infoIconContainer}>
-              <Mail size={20} color={Colors.light.accent} />
-            </View>
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Email address</Text>
-              <Text style={styles.infoText}>{email || 'No email provided'}</Text>
+          <View style={styles.infoCardWrap}>
+            <HardShadow offset={6} radius={20} />
+            <View style={styles.infoCard}>
+              <View style={styles.infoIconContainer}>
+                <Mail size={20} color={INK} strokeWidth={2.5} />
+              </View>
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Email address</Text>
+                <Text style={styles.infoText}>{email || 'No email provided'}</Text>
+              </View>
             </View>
           </View>
 
-          <TouchableOpacity
-            style={[styles.primaryButton, isResending && styles.buttonDisabled]}
-            onPress={handleResend}
-            disabled={isResending}
-            activeOpacity={0.85}
-          >
-            <RefreshCw size={18} color="#ffffff" style={styles.buttonIcon} />
-            <Text style={styles.primaryButtonText}>
-              {isResending ? 'Resending…' : 'Resend verification email'}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.primaryButtonWrap}>
+            {!isResending && <HardShadow offset={5} radius={16} />}
+            <TouchableOpacity
+              style={[styles.primaryButton, isResending && styles.buttonDisabled]}
+              onPress={handleResend}
+              disabled={isResending}
+              activeOpacity={0.85}
+            >
+              <RefreshCw size={18} color={INK} style={styles.buttonIcon} strokeWidth={2.5} />
+              <Text style={styles.primaryButtonText}>
+                {isResending ? 'Resending…' : 'Resend verification email'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={styles.secondaryButton}
             onPress={handleBackToSignIn}
             activeOpacity={0.85}
           >
-            <ArrowLeft size={18} color="#ffffff" style={styles.buttonIcon} />
+            <ArrowLeft size={18} color="#ffffff" style={styles.buttonIcon} strokeWidth={2.5} />
             <Text style={styles.secondaryButtonText}>Back to sign in</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -155,29 +162,34 @@ const styles = StyleSheet.create({
   iconCircle: {
     width: 120,
     height: 120,
-    borderRadius: 60,
+    borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: palette.orange,
     borderWidth: 3,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
+    borderColor: INK,
     marginBottom: 24,
   },
   title: {
     fontSize: 26,
-    fontWeight: '800' as const,
+    fontWeight: '900' as const,
     color: '#ffffff',
     marginBottom: 12,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.85)',
+    color: 'rgba(255, 255, 255, 0.9)',
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 24,
-    fontWeight: '500' as const,
+    fontWeight: '600' as const,
     paddingHorizontal: 20,
+  },
+  infoCardWrap: {
+    position: 'relative',
+    width: '100%',
+    marginBottom: 24,
   },
   infoCard: {
     flexDirection: 'row',
@@ -185,20 +197,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     paddingHorizontal: 20,
     paddingVertical: 18,
-    borderRadius: 16,
-    marginBottom: 24,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: INK,
     width: '100%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
   },
   infoIconContainer: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.light.qrBackground,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: INK,
+    backgroundColor: palette.skyBlue,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
@@ -209,7 +219,7 @@ const styles = StyleSheet.create({
   infoLabel: {
     fontSize: 12,
     color: Colors.light.textSecondary,
-    fontWeight: '600' as const,
+    fontWeight: '800' as const,
     marginBottom: 2,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -217,28 +227,29 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: 15,
     color: Colors.light.text,
-    fontWeight: '600' as const,
+    fontWeight: '800' as const,
+  },
+  primaryButtonWrap: {
+    position: 'relative',
+    width: '100%',
+    marginBottom: 12,
   },
   primaryButton: {
     backgroundColor: '#ffffff',
     borderRadius: 16,
+    borderWidth: 2.5,
+    borderColor: INK,
     paddingVertical: 16,
     paddingHorizontal: 24,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 4,
-    marginBottom: 12,
   },
   primaryButtonText: {
-    color: Colors.light.primary,
+    color: INK,
     fontSize: 16,
-    fontWeight: '700' as const,
+    fontWeight: '900' as const,
   },
   secondaryButton: {
     backgroundColor: 'transparent',
@@ -252,7 +263,7 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: '#ffffff',
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: '800' as const,
   },
   buttonDisabled: {
     opacity: 0.7,

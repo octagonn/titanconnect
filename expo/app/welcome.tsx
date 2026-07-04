@@ -15,10 +15,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import Colors from '@/constants/colors';
+import Colors, { INK, palette } from '@/constants/colors';
 import { useResponsiveLayout } from '@/lib/responsive';
 import { checkEmailExists } from '@/lib/supabase';
 import { showAlert } from '@/lib/alert';
+import HardShadow from '@/components/ui/HardShadow';
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -82,7 +83,7 @@ export default function WelcomeScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#00274C', '#003d73', '#0066CC']}
+        colors={[palette.navy, palette.blue, palette.skyBlue]}
         style={styles.gradientBackground}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -126,46 +127,57 @@ export default function WelcomeScreen() {
               <Text style={[styles.title, isLargeHeight && styles.titleLarge]}>TitanConnect</Text>
               <Text style={[styles.subtitle, isLargeHeight && styles.subtitleLarge]}>Your campus, your community</Text>
               <View style={styles.badge}>
-                <Shield size={14} color={Colors.light.accent} />
-                <Text style={styles.badgeText}>CSUF Verified Only</Text>
+                <Shield size={14} color={INK} strokeWidth={2.5} />
+                <Text style={styles.badgeText}>CSUF VERIFIED ONLY</Text>
               </View>
             </Animated.View>
 
             <View style={styles.featuresContainer}>
-              <View style={styles.featureCard}>
-                <View style={styles.featureIconContainer}>
-                  <Users size={22} color={Colors.light.accent} strokeWidth={2} />
-                </View>
-                <View style={styles.featureContent}>
-                  <Text style={styles.featureTitle}>Connect</Text>
-                  <Text style={styles.featureDesc}>Meet fellow Titans</Text>
-                </View>
-              </View>
-              <View style={styles.featureCard}>
-                <View style={styles.featureIconContainer}>
-                  <Calendar size={22} color={Colors.light.accent} strokeWidth={2} />
-                </View>
-                <View style={styles.featureContent}>
-                  <Text style={styles.featureTitle}>Explore</Text>
-                  <Text style={styles.featureDesc}>Discover campus events</Text>
+              <View style={styles.featureWrap}>
+                <HardShadow offset={5} radius={22} />
+                <View style={styles.featureCard}>
+                  <View style={[styles.featureIconContainer, { backgroundColor: palette.amber }]}>
+                    <Users size={22} color={INK} strokeWidth={2.5} />
+                  </View>
+                  <View style={styles.featureContent}>
+                    <Text style={styles.featureTitle}>Connect</Text>
+                    <Text style={styles.featureDesc}>Meet fellow Titans</Text>
+                  </View>
                 </View>
               </View>
-              <View style={styles.featureCard}>
-                <View style={styles.featureIconContainer}>
-                  <Sparkles size={22} color={Colors.light.accent} strokeWidth={2} />
+              <View style={styles.featureWrap}>
+                <HardShadow offset={5} radius={22} />
+                <View style={styles.featureCard}>
+                  <View style={[styles.featureIconContainer, { backgroundColor: palette.skyBlue }]}>
+                    <Calendar size={22} color={INK} strokeWidth={2.5} />
+                  </View>
+                  <View style={styles.featureContent}>
+                    <Text style={styles.featureTitle}>Explore</Text>
+                    <Text style={styles.featureDesc}>Discover campus events</Text>
+                  </View>
                 </View>
-                <View style={styles.featureContent}>
-                  <Text style={styles.featureTitle}>Engage</Text>
-                  <Text style={styles.featureDesc}>Quick tap-in connections</Text>
+              </View>
+              <View style={styles.featureWrap}>
+                <HardShadow offset={5} radius={22} />
+                <View style={styles.featureCard}>
+                  <View style={[styles.featureIconContainer, { backgroundColor: palette.orange }]}>
+                    <Sparkles size={22} color={INK} strokeWidth={2.5} />
+                  </View>
+                  <View style={styles.featureContent}>
+                    <Text style={styles.featureTitle}>Engage</Text>
+                    <Text style={styles.featureDesc}>Quick tap-in connections</Text>
+                  </View>
                 </View>
               </View>
             </View>
 
             <View style={styles.form}>
-              <View style={styles.formCard}>
+              <View style={styles.formWrap}>
+                <HardShadow offset={8} radius={28} />
+                <View style={styles.formCard}>
                 <Text style={styles.formTitle}>Get Started</Text>
                 <Text style={styles.formSubtitle}>Use your CSUF or Fullerton email</Text>
-                
+
                 <View style={styles.inputContainer}>
                   <Mail size={20} color={Colors.light.placeholder} style={styles.inputIcon} />
                   <TextInput
@@ -181,24 +193,28 @@ export default function WelcomeScreen() {
                   />
                 </View>
 
-                <TouchableOpacity
-                  style={[styles.button, (!email || isChecking) && styles.buttonDisabled]}
-                  onPress={handleContinue}
-                  disabled={!email || isChecking}
-                  testID="continue-button"
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.buttonText}>{isChecking ? 'Checking…' : 'Continue'}</Text>
-                  {!isChecking && (
-                    <ArrowRight size={20} color="#ffffff" style={styles.buttonIcon} />
-                  )}
-                </TouchableOpacity>
+                <View style={styles.buttonWrap}>
+                  {!(!email || isChecking) && <HardShadow offset={5} radius={22} />}
+                  <TouchableOpacity
+                    style={[styles.button, (!email || isChecking) && styles.buttonDisabled]}
+                    onPress={handleContinue}
+                    disabled={!email || isChecking}
+                    testID="continue-button"
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.buttonText}>{isChecking ? 'Checking…' : 'Continue'}</Text>
+                    {!isChecking && (
+                      <ArrowRight size={20} color="#ffffff" style={styles.buttonIcon} strokeWidth={2.5} />
+                    )}
+                  </TouchableOpacity>
+                </View>
 
                 <View style={styles.disclaimerContainer}>
                   <Heart size={14} color={Colors.light.textSecondary} />
                   <Text style={styles.disclaimer}>
                     Built for Titans, by Titans
                   </Text>
+                </View>
                 </View>
               </View>
             </View>
@@ -290,87 +306,93 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: INK,
   },
   badgeText: {
-    fontSize: 13,
-    color: '#ffffff',
-    fontWeight: '600' as const,
+    fontSize: 12,
+    color: INK,
+    fontWeight: '900' as const,
+    letterSpacing: 0.4,
   },
   featuresContainer: {
     marginBottom: 12,
-    gap: 8,
+    gap: 12,
+  },
+  featureWrap: {
+    position: 'relative',
   },
   featureCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    borderRadius: 14,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    borderWidth: 2.5,
+    borderColor: INK,
+    padding: 12,
   },
   featureIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: INK,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
+    marginRight: 10,
   },
   featureContent: {
     flex: 1,
   },
   featureTitle: {
     fontSize: 15,
-    color: '#ffffff',
-    fontWeight: '700' as const,
+    color: INK,
+    fontWeight: '900' as const,
     marginBottom: 0,
   },
   featureDesc: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.75)',
-    fontWeight: '500' as const,
+    color: Colors.light.textSecondary,
+    fontWeight: '600' as const,
   },
   form: {
     marginTop: 12,
   },
+  formWrap: {
+    position: 'relative',
+  },
   formCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 18,
+    backgroundColor: Colors.light.card,
+    borderRadius: 28,
+    borderWidth: 3,
+    borderColor: INK,
     padding: 22,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
   },
   formTitle: {
     fontSize: 20,
-    fontWeight: '700' as const,
+    fontWeight: '900' as const,
     color: Colors.light.text,
     marginBottom: 1,
   },
   formSubtitle: {
     fontSize: 14,
+    fontWeight: '600' as const,
     color: Colors.light.textSecondary,
     marginBottom: 10,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.light.inputBackground,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: Colors.light.border,
+    backgroundColor: Colors.light.background,
+    borderRadius: 16,
+    borderWidth: 2.5,
+    borderColor: INK,
     paddingHorizontal: 14,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   inputIcon: {
     marginRight: 10,
@@ -379,30 +401,30 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 13,
     fontSize: 16,
+    fontWeight: '600' as const,
     color: Colors.light.text,
   },
+  buttonWrap: {
+    position: 'relative',
+    marginBottom: 6,
+  },
   button: {
-    backgroundColor: Colors.light.primary,
-    borderRadius: 14,
+    backgroundColor: palette.orange,
+    borderRadius: 22,
+    borderWidth: 2.5,
+    borderColor: INK,
     paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
-    shadowColor: Colors.light.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
   },
   buttonDisabled: {
-    backgroundColor: Colors.light.border,
-    shadowOpacity: 0,
+    backgroundColor: '#D8D3E0',
   },
   buttonText: {
     color: '#ffffff',
     fontSize: 17,
-    fontWeight: '700' as const,
+    fontWeight: '900' as const,
     marginRight: 8,
   },
   buttonIcon: {
@@ -416,7 +438,7 @@ const styles = StyleSheet.create({
   },
   disclaimer: {
     fontSize: 11,
+    fontWeight: '600' as const,
     color: Colors.light.textSecondary,
-    fontWeight: '500' as const,
   },
 });

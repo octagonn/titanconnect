@@ -1,9 +1,10 @@
-import { Heart, MessageCircle,Mail, BookOpenText, MessageCircleHeart, Plus, Image as ImageIcon, X, MoreHorizontal, Award, GraduationCap, University } from 'lucide-react-native';
+import { Heart, MessageCircle, Mail, BookOpenText, Plus, Image as ImageIcon, X, MoreHorizontal, Award, GraduationCap, University, Rss, Calendar, BookOpen, Ghost, ShoppingBag } from 'lucide-react-native';
 import { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView } from 'react-native';
 import { showAlert } from '@/lib/alert';
+import { getFriendlyErrorMessage } from '@/lib/errors';
 import * as ImagePicker from 'expo-image-picker';
-import Colors from '@/constants/colors';
+import Colors, { INK, palette } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { Post, Comment } from '@/types';
 import { trpc } from '@/lib/trpc';
@@ -11,11 +12,27 @@ import { uploadImage } from '@/lib/storage';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import styles from '@/styles/home.styles';
+import HardShadow from '@/components/ui/HardShadow';
+import Avatar from '@/components/ui/Avatar';
+import Chip from '@/components/ui/Chip';
+import EventsPreview from '@/components/discover/EventsPreview';
+import StudyBuddyPreview from '@/components/discover/StudyBuddyPreview';
+import AnonymousPreview from '@/components/discover/AnonymousPreview';
+import MarketplacePreview from '@/components/discover/MarketplacePreview';
+
+const CATEGORIES = [
+  { key: 'feed', label: 'Feed', icon: Rss },
+  { key: 'events', label: 'Events', icon: Calendar },
+  { key: 'study', label: 'Study Buddy', icon: BookOpen },
+  { key: 'anon', label: 'Anonymous', icon: Ghost },
+  { key: 'market', label: 'Marketplace', icon: ShoppingBag },
+] as const;
+type CategoryKey = typeof CATEGORIES[number]['key'];
 
 export default function HomeScreen() {
   const { currentUser } = useAuth();
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [category, setCategory] = useState<CategoryKey>('feed');
   const [showCreatePost, setShowCreatePost] = useState<boolean>(false);
   const [newPostContent, setNewPostContent] = useState<string>('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -62,7 +79,6 @@ export default function HomeScreen() {
   } = trpc.posts.getInfinite.useInfiniteQuery(
     {
       limit: 10,
-      search: searchQuery.trim() || undefined,
     },
     {
       getNextPageParam: (lastPage) => lastPage.nextCursor,
@@ -70,16 +86,6 @@ export default function HomeScreen() {
   );
 
   const posts = data?.pages.flatMap((page) => page.items) ?? [];
-
-  const filteredPosts = useMemo(() => {
-    if (!searchQuery.trim()) return posts;
-    const q = searchQuery.toLowerCase();
-    return posts.filter(
-      (p) =>
-        p.content.toLowerCase().includes(q) ||
-        p.userName.toLowerCase().includes(q)
-    );
-  }, [posts, searchQuery]);
 
   const createPostMutation = trpc.posts.create.useMutation({
     onSuccess: () => {
@@ -91,7 +97,7 @@ export default function HomeScreen() {
     },
     onError: (error) => {
       console.error('Create Post Error:', error);
-      showAlert('Error', error.message || 'Failed to create post');
+      showAlert('Error', getFriendlyErrorMessage(error, 'Failed to create post'));
       setIsPosting(false);
     },
   });
@@ -100,7 +106,7 @@ export default function HomeScreen() {
     // Optimistic UI for smoother like experience
     onMutate: async ({ postId }) => {
       await utils.posts.getInfinite.cancel();
-      const input = { limit: 10, search: searchQuery.trim() || undefined };
+      const input = { limit: 10 };
       const previous = utils.posts.getInfinite.getData(input);
 
       utils.posts.getInfinite.setInfiniteData(input, (data) => {
@@ -331,7 +337,9 @@ export default function HomeScreen() {
       };
 
       return (
-        <View style={styles.postCard}>
+        <View style={styles.postCardWrap}>
+          <HardShadow offset={8} radius={24} />
+          <View style={styles.postCard}>
           <View style={styles.postHeader}>
             <TouchableOpacity
               onPress={() => {
@@ -343,10 +351,7 @@ export default function HomeScreen() {
               }}
               style={styles.avatarWrap}
             >
-              <Image
-                source={{ uri: item.userAvatar || 'https://i.pravatar.cc/150?img=0' }}
-                style={styles.avatar}
-              />
+              <Avatar uri={item.userAvatar} name={item.userName} size={44} />
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => {
@@ -422,10 +427,7 @@ export default function HomeScreen() {
                           }
                         }}
                       >
-                        <Image
-                          source={{ uri: comment.userAvatar || 'https://i.pravatar.cc/150?img=0' }}
-                          style={styles.commentAvatar}
-                        />
+                        <Avatar uri={comment.userAvatar} name={comment.userName} size={32} />
                       </TouchableOpacity>
                       <View style={styles.commentContent}>
                         <TouchableOpacity
@@ -479,10 +481,7 @@ export default function HomeScreen() {
                               )
                               .map((reply) => (
                                 <View key={reply.id} style={styles.replyRow}>
-                                  <Image
-                                    source={{ uri: reply.userAvatar || 'https://i.pravatar.cc/150?img=0' }}
-                                    style={styles.replyAvatar}
-                                  />
+                                  <Avatar uri={reply.userAvatar} name={reply.userName} size={24} />
                                   <View style={styles.replyContent}>
                                     <Text style={styles.replyAuthor}>{reply.userName}</Text>
                                     <Text style={styles.replyText}>{reply.content}</Text>
@@ -540,6 +539,7 @@ export default function HomeScreen() {
               </View>
             </View>
           )}
+          </View>
         </View>
       );
     },
@@ -659,55 +659,80 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.searchBar}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search posts or people..."
-          placeholderTextColor={Colors.light.placeholder}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          returnKeyType="search"
-        />
-        {searchQuery.trim().length > 0 && (
-          <TouchableOpacity style={styles.cancelSearch} onPress={() => setSearchQuery('')}>
-            <Text style={styles.cancelText}>Cancel</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.categoryBar}
+        contentContainerStyle={styles.categoryBarContent}
+      >
+        {CATEGORIES.map((cat) => {
+          const active = category === cat.key;
+          const Icon = cat.icon;
+          return (
+            <TouchableOpacity
+              key={cat.key}
+              style={[styles.categoryChip, active && styles.categoryChipActive]}
+              onPress={() => setCategory(cat.key)}
+              activeOpacity={0.8}
+            >
+              <Icon size={15} color={active ? '#FFFFFF' : INK} strokeWidth={2.5} />
+              <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>
+                {cat.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
 
-      {isLoading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={Colors.light.primary} />
-        </View>
-      ) : (
-        <FlatList
-          data={filteredPosts}
-          renderItem={renderPost}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          onEndReached={() => hasNextPage && fetchNextPage()}
-          onEndReachedThreshold={0.5}
-          refreshing={isRefetching}
-          onRefresh={refetch}
-          ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={Colors.light.primary} /> : null}
-          ListEmptyComponent={
-            !isLoading && (
-              <View style={styles.centerContainer}>
-                <Text style={styles.emptyText}>No posts found</Text>
-              </View>
-            )
-          }
-        />
+      {category === 'feed' && (
+        <>
+          {isLoading ? (
+            <View style={styles.centerContainer}>
+              <ActivityIndicator size="large" color={Colors.light.primary} />
+            </View>
+          ) : (
+            <FlatList
+              data={posts}
+              renderItem={renderPost}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+              onEndReached={() => hasNextPage && fetchNextPage()}
+              onEndReachedThreshold={0.5}
+              refreshing={isRefetching}
+              onRefresh={refetch}
+              ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={Colors.light.primary} /> : null}
+              ListEmptyComponent={
+                !isLoading && (
+                  <View style={styles.centerContainer}>
+                    <Text style={styles.emptyText}>No posts found</Text>
+                  </View>
+                )
+              }
+            />
+          )}
+
+          <View style={styles.fabWrap}>
+            <HardShadow offset={5} radius={30} />
+            <TouchableOpacity
+              style={styles.fab}
+              onPress={() => setShowCreatePost(true)}
+              testID="create-post-button"
+            >
+              <Plus size={24} color="#ffffff" strokeWidth={2.5} />
+            </TouchableOpacity>
+          </View>
+        </>
       )}
 
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => setShowCreatePost(true)}
-        testID="create-post-button"
-      >
-        <Plus size={24} color="#ffffff" />
-      </TouchableOpacity>
+      {category !== 'feed' && (
+        <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+          {category === 'events' && <EventsPreview />}
+          {category === 'study' && <StudyBuddyPreview />}
+          {category === 'anon' && <AnonymousPreview />}
+          {category === 'market' && <MarketplacePreview />}
+        </ScrollView>
+      )}
 
       <Modal
         visible={!!postOptionsId}
@@ -819,25 +844,30 @@ export default function HomeScreen() {
             )}
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
-                <ImageIcon size={24} color={Colors.light.primary} />
+              <TouchableOpacity style={styles.imageButton} onPress={pickImage} testID="pick-image-button">
+                <ImageIcon size={24} color={INK} strokeWidth={2.5} />
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[
-                  styles.postButton,
-                  (!newPostContent.trim() && !selectedImage) && styles.postButtonDisabled,
-                ]}
-                onPress={handleCreatePost}
-                disabled={isPosting || (!newPostContent.trim() && !selectedImage)}
-                testID="submit-post-button"
-              >
-                {isPosting ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.postButtonText}>Post</Text>
+              <View style={styles.postButtonWrap}>
+                {!(isPosting || (!newPostContent.trim() && !selectedImage)) && (
+                  <HardShadow offset={5} radius={18} />
                 )}
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.postButton,
+                    (!newPostContent.trim() && !selectedImage) && styles.postButtonDisabled,
+                  ]}
+                  onPress={handleCreatePost}
+                  disabled={isPosting || (!newPostContent.trim() && !selectedImage)}
+                  testID="submit-post-button"
+                >
+                  {isPosting ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.postButtonText}>Post</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -877,20 +907,25 @@ export default function HomeScreen() {
               multiline
             />
             <View style={styles.editModalActions}>
-              <TouchableOpacity
-                style={[
-                  styles.postButton,
-                  (!editPostContent.trim() || updatePostMutation.isPending) && styles.postButtonDisabled,
-                ]}
-                onPress={handleUpdatePost}
-                disabled={!editPostContent.trim() || updatePostMutation.isPending}
-              >
-                {updatePostMutation.isPending ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.postButtonText}>Save</Text>
+              <View style={styles.postButtonWrap}>
+                {!(!editPostContent.trim() || updatePostMutation.isPending) && (
+                  <HardShadow offset={5} radius={18} />
                 )}
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.postButton,
+                    (!editPostContent.trim() || updatePostMutation.isPending) && styles.postButtonDisabled,
+                  ]}
+                  onPress={handleUpdatePost}
+                  disabled={!editPostContent.trim() || updatePostMutation.isPending}
+                >
+                  {updatePostMutation.isPending ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.postButtonText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -930,20 +965,25 @@ export default function HomeScreen() {
               multiline
             />
             <View style={styles.editModalActions}>
-              <TouchableOpacity
-                style={[
-                  styles.postButton,
-                  (!editCommentContent.trim() || updateCommentMutation.isPending) && styles.postButtonDisabled,
-                ]}
-                onPress={handleUpdateComment}
-                disabled={!editCommentContent.trim() || updateCommentMutation.isPending}
-              >
-                {updateCommentMutation.isPending ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.postButtonText}>Save</Text>
+              <View style={styles.postButtonWrap}>
+                {!(!editCommentContent.trim() || updateCommentMutation.isPending) && (
+                  <HardShadow offset={5} radius={18} />
                 )}
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.postButton,
+                    (!editCommentContent.trim() || updateCommentMutation.isPending) && styles.postButtonDisabled,
+                  ]}
+                  onPress={handleUpdateComment}
+                  disabled={!editCommentContent.trim() || updateCommentMutation.isPending}
+                >
+                  {updateCommentMutation.isPending ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.postButtonText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -963,16 +1003,11 @@ export default function HomeScreen() {
           ) : (
             <ScrollView contentContainerStyle={styles.profileModalContent} showsVerticalScrollIndicator={false}>
               <View style={styles.profileHeader}>
-                <Image
-                  source={{ uri: profileQuery.data.avatar || 'https://i.pravatar.cc/150?img=0' }}
-                  style={styles.profileAvatar}
-                />
+                <Avatar uri={profileQuery.data.avatar} name={profileQuery.data.name} size={140} />
                 <Text style={styles.profileName}>{profileQuery.data.name}</Text>
                 {profileQuery.data.major ? <Text style={styles.profileMajor}>{profileQuery.data.major}</Text> : null}
                 {profileQuery.data.year ? (
-                  <View style={styles.profilePill}>
-                    <Text style={styles.profilePillText}>{profileQuery.data.year}</Text>
-                  </View>
+                  <Chip label={profileQuery.data.year} variant="solid" color={palette.blue} />
                 ) : null}
                 <View style={styles.profileActions}>
                   {renderFriendButton()}
@@ -991,13 +1026,18 @@ export default function HomeScreen() {
 
                   {/* Header with Icon + Title */}
                   <View style={styles.sectionHeader}>
-                    <BookOpenText size={20} color={Colors.light.primary} />
+                    <View style={styles.sectionIconWell}>
+                      <BookOpenText size={16} color={INK} strokeWidth={2.5} />
+                    </View>
                     <Text style={styles.sectionTitle}>Bio</Text>
                   </View>
 
                   {/* Card-style body */}
-                  <View style={styles.infoCard}>
-                    <Text style={styles.profileBody}>{profileQuery.data.bio}</Text>
+                  <View style={styles.infoCardWrap}>
+                    <HardShadow offset={6} radius={20} />
+                    <View style={styles.infoCard}>
+                      <Text style={styles.profileBody}>{profileQuery.data.bio}</Text>
+                    </View>
                   </View>
 
                 </View>
@@ -1009,11 +1049,15 @@ export default function HomeScreen() {
 
                 {/* Header: Icon + Title */}
                 <View style={styles.sectionHeader}>
-                  <Award size={20} color={Colors.light.primary} />
+                  <View style={styles.sectionIconWell}>
+                    <Award size={16} color={INK} strokeWidth={2.5} />
+                  </View>
                   <Text style={styles.sectionTitle}>Academic Info</Text>
                 </View>
 
                 {/* Card Container */}
+                <View style={styles.infoCardWrap}>
+                <HardShadow offset={6} radius={20} />
                 <View style={styles.infoCard}>
 
                   {/* Major */}
@@ -1058,6 +1102,7 @@ export default function HomeScreen() {
                   )}
 
                 </View>
+                </View>
               </View>
 
               {/* Interests Section of the Profile Modal */}
@@ -1066,18 +1111,21 @@ export default function HomeScreen() {
 
                   {/* Header: Icon + Title */}
                   <View style={styles.sectionHeader}>
-                    <Heart size={20} color={Colors.light.primary} />
+                    <View style={styles.sectionIconWell}>
+                      <Heart size={16} color={INK} strokeWidth={2.5} />
+                    </View>
                     <Text style={styles.sectionTitle}>Interests</Text>
                   </View>
 
                   {/* Card container for chips */}
-                  <View style={styles.infoCard}>
-                    <View style={styles.profileChips}>
-                      {profileQuery.data.interests.map((interest: string) => (
-                        <View key={interest} style={styles.profileChip}>
-                          <Text style={styles.profileChipText}>{interest}</Text>
-                        </View>
-                      ))}
+                  <View style={styles.infoCardWrap}>
+                    <HardShadow offset={6} radius={20} />
+                    <View style={styles.infoCard}>
+                      <View style={styles.profileChips}>
+                        {profileQuery.data.interests.map((interest: string) => (
+                          <Chip key={interest} label={interest} variant="outline" />
+                        ))}
+                      </View>
                     </View>
                   </View>
 

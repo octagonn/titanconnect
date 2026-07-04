@@ -5,9 +5,21 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { Platform } from 'react-native';
 
+// Web image picks come back as `blob:http://...` URIs with no filename or
+// extension at all — `uri.split('.').pop()` on one of those returns the
+// entire URI (colons and slashes included), which then gets used verbatim
+// as the storage object's "extension", producing a mangled key. Only trust
+// a dot that appears in the last path segment of a real file path/URL.
+function getFileExtension(uri: string): string {
+  if (uri.startsWith('blob:') || uri.startsWith('data:')) return 'jpg';
+  const lastSegment = uri.split('?')[0].split('#')[0].split('/').pop() || '';
+  const dotIndex = lastSegment.lastIndexOf('.');
+  return dotIndex >= 0 ? lastSegment.slice(dotIndex + 1).toLowerCase() : 'jpg';
+}
+
 export async function uploadImage(bucket: string, uri: string): Promise<string | null> {
   try {
-    const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
+    const ext = getFileExtension(uri);
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
     
     let blobOrBuffer: Blob | ArrayBuffer;

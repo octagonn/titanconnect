@@ -1,14 +1,17 @@
 import { useRouter } from 'expo-router';
 import { Search, Plus } from 'lucide-react-native';
 import { useState, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, TextInput, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
 import { showAlert } from '@/lib/alert';
-import Colors from '@/constants/colors';
+import Colors, { INK, palette } from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Conversation } from '@/types';
 import { useMessageRealtime } from '@/hooks/useMessageRealtime';
 import { trpc } from '@/lib/trpc';
+import HardShadow from '@/components/ui/HardShadow';
+import ListRow from '@/components/ui/ListRow';
+import Chip from '@/components/ui/Chip';
 
 export default function MessagesScreen() {
   const { conversations, conversationsQuery, connections, getOtherParticipant } = useApp();
@@ -75,33 +78,16 @@ export default function MessagesScreen() {
       !item.lastMessage.read;
 
     return (
-      <TouchableOpacity
-        style={styles.conversationItem}
+      <ListRow
+        avatarUri={otherUser.avatar}
+        avatarName={otherUser.name}
+        title={otherUser.name}
+        subtitle={item.lastMessage?.content || 'No messages yet'}
+        meta={item.lastMessage ? getTimeAgo(item.lastMessage.createdAt) : ''}
+        unread={!!isUnread}
         onPress={() => router.push(`/chat/${item.id}` as any)}
-        testID={`conversation-${item.id}`}
-      >
-        <Image
-          source={{ uri: otherUser.avatar || 'https://i.pravatar.cc/150?img=0' }}
-          style={styles.avatar}
-        />
-        <View style={styles.conversationContent}>
-          <View style={styles.conversationHeader}>
-            <Text style={[styles.userName, isUnread && styles.unreadText]}>
-              {otherUser.name}
-            </Text>
-            <Text style={styles.timeAgo}>
-              {item.lastMessage ? getTimeAgo(item.lastMessage.createdAt) : ''}
-            </Text>
-          </View>
-          <Text
-            style={[styles.lastMessage, isUnread && styles.unreadText]}
-            numberOfLines={1}
-          >
-            {item.lastMessage?.content || 'No messages yet'}
-          </Text>
-        </View>
-        {isUnread && <View style={styles.unreadDot} />}
-      </TouchableOpacity>
+        style={styles.conversationItem}
+      />
     );
   };
 
@@ -117,10 +103,13 @@ export default function MessagesScreen() {
           onChangeText={setSearchQuery}
           testID="search-input"
         />
-        <TouchableOpacity style={styles.newMessageButton} onPress={() => setShowNewMessage(true)}>
-          <Plus size={18} color="#fff" />
-          <Text style={styles.newMessageText}>New Message</Text>
-        </TouchableOpacity>
+        <View style={styles.newMessageWrap}>
+          <HardShadow offset={4} radius={18} />
+          <TouchableOpacity style={styles.newMessageButton} onPress={() => setShowNewMessage(true)}>
+            <Plus size={18} color="#fff" strokeWidth={2.5} />
+            <Text style={styles.newMessageText}>New Message</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {filteredConversations.length === 0 ? (
@@ -146,29 +135,30 @@ export default function MessagesScreen() {
               <View style={styles.requestSection}>
                 <Text style={styles.requestTitle}>Friend requests</Text>
                 {incomingRequests.map((req) => (
-                  <View key={req.id} style={styles.requestRow}>
-                    <View style={styles.requestUser}>
-                      <Image
-                        source={{ uri: req.otherUser?.avatar || 'https://i.pravatar.cc/150?img=0' }}
-                        style={styles.requestAvatar}
-                      />
-                      <Text style={styles.requestName}>{req.otherUser?.name || 'Unknown'}</Text>
-                    </View>
-                    <View style={styles.requestActions}>
-                      <TouchableOpacity
-                        style={[styles.requestButton, styles.acceptButton]}
-                        onPress={() => handleRespond(req.id, 'accept')}
-                      >
-                        <Text style={styles.requestButtonText}>Accept</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.requestButton, styles.declineButton]}
-                        onPress={() => handleRespond(req.id, 'decline')}
-                      >
-                        <Text style={[styles.requestButtonText, styles.declineText]}>Decline</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+                  <ListRow
+                    key={req.id}
+                    avatarUri={req.otherUser?.avatar}
+                    avatarName={req.otherUser?.name}
+                    title={req.otherUser?.name || 'Unknown'}
+                    style={styles.requestRow}
+                    trailing={
+                      <View style={styles.requestActions}>
+                        <Chip
+                          label="Accept"
+                          variant="solid"
+                          color={palette.blue}
+                          size="sm"
+                          onPress={() => handleRespond(req.id, 'accept')}
+                        />
+                        <Chip
+                          label="Decline"
+                          variant="outline"
+                          size="sm"
+                          onPress={() => handleRespond(req.id, 'decline')}
+                        />
+                      </View>
+                    }
+                  />
                 ))}
               </View>
             ) : null
@@ -196,22 +186,15 @@ export default function MessagesScreen() {
                 data={friendOptions}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.friendRow}
+                  <ListRow
+                    avatarUri={item.otherUser?.avatar}
+                    avatarName={item.otherUser?.name}
+                    title={item.otherUser?.name || 'Student'}
+                    subtitle="Tap to start a conversation"
                     onPress={() => startConversation(item.otherUser!.id)}
-                    disabled={upsertConversation.isPending}
-                  >
-                    <Image
-                      source={{ uri: item.otherUser?.avatar || 'https://i.pravatar.cc/150?img=0' }}
-                      style={styles.friendAvatar}
-                    />
-                    <View style={styles.friendInfo}>
-                      <Text style={styles.friendName}>{item.otherUser?.name}</Text>
-                      <Text style={styles.friendMeta}>Tap to start a conversation</Text>
-                    </View>
-                  </TouchableOpacity>
+                    style={styles.friendRow}
+                  />
                 )}
-                ItemSeparatorComponent={() => <View style={styles.separator} />}
                 contentContainerStyle={styles.friendList}
                 keyboardShouldPersistTaps="handled"
               />
@@ -246,90 +229,53 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.light.background,
+    backgroundColor: Colors.light.feedBackground,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.light.border,
+    borderBottomWidth: 3,
+    borderBottomColor: INK,
   },
   searchIcon: {
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    backgroundColor: Colors.light.inputBackground,
-    borderRadius: 20,
+    backgroundColor: Colors.light.card,
+    borderWidth: 2,
+    borderColor: INK,
+    borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 8,
     fontSize: 16,
+    fontWeight: '600' as const,
     color: Colors.light.text,
+  },
+  newMessageWrap: {
+    position: 'relative',
+    marginLeft: 8,
   },
   newMessageButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.light.primary,
+    backgroundColor: palette.orange,
+    borderWidth: 2,
+    borderColor: INK,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 18,
-    marginLeft: 8,
+    borderRadius: 16,
     gap: 6,
   },
   newMessageText: {
     color: '#fff',
-    fontWeight: '700' as const,
-    fontSize: 14,
+    fontWeight: '900' as const,
+    fontSize: 13,
   },
   listContent: {
     paddingVertical: 8,
   },
   conversationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.light.background,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.light.border,
-  },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    marginRight: 12,
-  },
-  conversationContent: {
-    flex: 1,
-  },
-  conversationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  userName: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: Colors.light.text,
-  },
-  timeAgo: {
-    fontSize: 12,
-    color: Colors.light.textSecondary,
-  },
-  lastMessage: {
-    fontSize: 14,
-    color: Colors.light.textSecondary,
-    lineHeight: 20,
-  },
-  unreadText: {
-    fontWeight: '700' as const,
-    color: Colors.light.text,
-  },
-  unreadDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: Colors.light.primary,
-    marginLeft: 8,
+    marginHorizontal: 12,
+    marginVertical: 6,
   },
   emptyContainer: {
     flex: 1,
@@ -339,71 +285,35 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: '600' as const,
+    fontWeight: '900' as const,
     color: Colors.light.text,
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
+    fontWeight: '600' as const,
     color: Colors.light.textSecondary,
     textAlign: 'center',
   },
   requestSection: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 12,
-    backgroundColor: Colors.light.background,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.light.border,
-    gap: 8,
+    borderBottomWidth: 3,
+    borderBottomColor: INK,
+    gap: 10,
   },
   requestTitle: {
     fontSize: 14,
-    fontWeight: '700' as const,
+    fontWeight: '900' as const,
     color: Colors.light.text,
+    paddingHorizontal: 4,
   },
   requestRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  requestUser: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-  },
-  requestAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-  },
-  requestName: {
-    fontSize: 15,
-    color: Colors.light.text,
-    fontWeight: '600' as const,
+    marginHorizontal: 0,
   },
   requestActions: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  requestButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  acceptButton: {
-    backgroundColor: Colors.light.primary,
-  },
-  declineButton: {
-    backgroundColor: Colors.light.border,
-  },
-  requestButtonText: {
-    color: '#fff',
-    fontWeight: '600' as const,
-  },
-  declineText: {
-    color: Colors.light.text,
+    gap: 6,
   },
   modalContainer: {
     flex: 1,
@@ -411,13 +321,15 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(22,13,40,0.5)',
   },
   modalSheet: {
     marginTop: 'auto',
-    backgroundColor: Colors.light.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: Colors.light.card,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderTopWidth: 3,
+    borderColor: INK,
     maxHeight: '70%',
     paddingBottom: 24,
   },
@@ -426,48 +338,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.light.border,
+    borderBottomWidth: 2.5,
+    borderBottomColor: INK,
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: '700' as const,
+    fontWeight: '900' as const,
     color: Colors.light.text,
   },
   modalClose: {
     color: Colors.light.textSecondary,
-    fontWeight: '600' as const,
+    fontWeight: '800' as const,
   },
   friendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  friendAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    marginRight: 12,
-  },
-  friendInfo: {
-    flex: 1,
-  },
-  friendName: {
-    fontSize: 16,
-    fontWeight: '700' as const,
-    color: Colors.light.text,
-  },
-  friendMeta: {
-    fontSize: 13,
-    color: Colors.light.textSecondary,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: Colors.light.border,
-    marginLeft: 76,
+    marginHorizontal: 16,
+    marginVertical: 6,
   },
   friendList: {
+    paddingVertical: 8,
     paddingBottom: 16,
   },
   emptyModal: {

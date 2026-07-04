@@ -3,9 +3,10 @@ import { useState, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { Eye, EyeOff } from 'lucide-react-native';
 import { showAlert } from '@/lib/alert';
-import Colors from '@/constants/colors';
+import Colors, { INK } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useResponsiveLayout } from '@/lib/responsive';
+import HardShadow from '@/components/ui/HardShadow';
 
 type Params = {
   email?: string;
@@ -140,6 +141,8 @@ export default function EmailPasswordAuthScreen() {
           { paddingBottom: 24 + insets.bottom },
         ]}
       >
+        <View style={styles.cardWrap}>
+        <HardShadow offset={8} radius={28} />
         <View style={styles.card}>
           <Text style={styles.heading}>
             {mode === 'signup' ? 'Create your account' : 'Welcome back'}
@@ -196,16 +199,19 @@ export default function EmailPasswordAuthScreen() {
             </Text>
           </View>
 
-          <TouchableOpacity
-            style={[styles.button, (!password || isSubmitting) && styles.buttonDisabled]}
-            onPress={handleSubmit}
-            disabled={!password || isSubmitting}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.buttonText}>
-              {isSubmitting ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Sign in'}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.buttonWrap}>
+            {!(!password || isSubmitting) && <HardShadow offset={5} radius={22} />}
+            <TouchableOpacity
+              style={[styles.button, (!password || isSubmitting) && styles.buttonDisabled]}
+              onPress={handleSubmit}
+              disabled={!password || isSubmitting}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.buttonText}>
+                {isSubmitting ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Sign in'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={[
@@ -227,6 +233,7 @@ export default function EmailPasswordAuthScreen() {
               : 'Need help? Make sure your email is verified before signing in.'}
           </Text>
         </View>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
@@ -235,7 +242,7 @@ export default function EmailPasswordAuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.light.background,
+    backgroundColor: Colors.light.feedBackground,
   },
   content: {
     flex: 1,
@@ -247,24 +254,25 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     justifyContent: 'flex-start',
   },
+  cardWrap: {
+    position: 'relative',
+  },
   card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 18,
+    backgroundColor: Colors.light.card,
+    borderRadius: 28,
+    borderWidth: 3,
+    borderColor: INK,
     padding: 22,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 8,
   },
   heading: {
     fontSize: 22,
-    fontWeight: '800' as const,
+    fontWeight: '900' as const,
     color: Colors.light.text,
     marginBottom: 4,
   },
   subheading: {
     fontSize: 14,
+    fontWeight: '600' as const,
     color: Colors.light.textSecondary,
     marginBottom: 16,
   },
@@ -273,45 +281,48 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '700' as const,
+    fontWeight: '800' as const,
     color: Colors.light.text,
     marginBottom: 6,
   },
   inputContainerDisabled: {
-    backgroundColor: Colors.light.inputBackground,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.light.border,
+    backgroundColor: Colors.light.background,
+    borderWidth: 2,
+    borderColor: INK,
+    borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   emailText: {
     fontSize: 15,
+    fontWeight: '600' as const,
     color: Colors.light.text,
   },
   input: {
-    backgroundColor: Colors.light.inputBackground,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.light.border,
+    backgroundColor: Colors.light.background,
+    borderWidth: 2,
+    borderColor: INK,
+    borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 15,
+    fontWeight: '600' as const,
     color: Colors.light.text,
   },
   passwordRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.light.inputBackground,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.light.border,
+    backgroundColor: Colors.light.background,
+    borderWidth: 2,
+    borderColor: INK,
+    borderRadius: 16,
   },
   passwordInput: {
     flex: 1,
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 15,
+    fontWeight: '600' as const,
     color: Colors.light.text,
   },
   passwordToggle: {
@@ -321,27 +332,34 @@ const styles = StyleSheet.create({
   helperText: {
     marginTop: 6,
     fontSize: 12,
+    fontWeight: '600' as const,
     color: Colors.light.textSecondary,
   },
-  button: {
-    backgroundColor: Colors.light.primary,
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
+  buttonWrap: {
+    position: 'relative',
     marginTop: 8,
     marginBottom: 4,
   },
+  button: {
+    backgroundColor: Colors.light.primary,
+    borderRadius: 22,
+    borderWidth: 2.5,
+    borderColor: INK,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
   buttonDisabled: {
-    backgroundColor: Colors.light.border,
+    backgroundColor: '#D8D3E0',
   },
   buttonText: {
     color: '#ffffff',
     fontSize: 16,
-    fontWeight: '700' as const,
+    fontWeight: '900' as const,
   },
   footerText: {
     marginTop: 8,
     fontSize: 12,
+    fontWeight: '600' as const,
     color: Colors.light.textSecondary,
   },
   switchRow: {
@@ -352,18 +370,20 @@ const styles = StyleSheet.create({
   },
   switchText: {
     fontSize: 13,
+    fontWeight: '600' as const,
     color: Colors.light.textSecondary,
   },
   switchButton: {
     fontSize: 13,
     color: Colors.light.primary,
-    fontWeight: '700' as const,
+    fontWeight: '800' as const,
     marginLeft: 6,
   },
   secondaryButton: {
-    borderWidth: 1,
-    borderColor: Colors.light.border,
-    borderRadius: 12,
+    backgroundColor: Colors.light.card,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: INK,
     paddingVertical: 12,
     alignItems: 'center',
     marginTop: 12,
@@ -373,7 +393,7 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     fontSize: 14,
-    fontWeight: '700' as const,
+    fontWeight: '800' as const,
     color: Colors.light.primary,
   },
 });

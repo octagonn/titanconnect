@@ -1,14 +1,16 @@
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { Send } from 'lucide-react-native';
 import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { showAlert } from '@/lib/alert';
-import Colors from '@/constants/colors';
+import Colors, { INK } from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Message } from '@/types';
 import { trpc } from '@/lib/trpc';
 import { useMessageRealtime } from '@/hooks/useMessageRealtime';
+import Avatar from '@/components/ui/Avatar';
+import HardShadow from '@/components/ui/HardShadow';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -63,7 +65,7 @@ export default function ChatScreen() {
         title: otherUser.name,
         headerRight: () => (
           <TouchableOpacity onPress={() => router.push(`/profile/${otherUser.id}` as any)}>
-            <Text style={{ color: Colors.light.primary, fontWeight: '600' }}>Profile</Text>
+            <Text style={{ color: '#FFFFFF', fontWeight: '900' as const }}>Profile</Text>
           </TouchableOpacity>
         ),
       });
@@ -121,10 +123,7 @@ export default function ChatScreen() {
         >
           <View style={[styles.messageContainer, isMe ? styles.myMessage : styles.theirMessage]}>
             {!isMe && otherUser && (
-              <Image
-                source={{ uri: otherUser.avatar || 'https://i.pravatar.cc/150?img=0' }}
-                style={styles.messageAvatar}
-              />
+              <Avatar uri={otherUser.avatar} name={otherUser.name} size={32} />
             )}
             <View style={[styles.messageBubble, isMe ? styles.myBubble : styles.theirBubble]}>
               <Text style={[styles.messageText, isMe && styles.myMessageText]}>
@@ -135,10 +134,7 @@ export default function ChatScreen() {
               </Text>
             </View>
             {isMe && currentUser && (
-              <Image
-                source={{ uri: currentUser.avatar || 'https://i.pravatar.cc/150?img=0' }}
-                style={styles.messageAvatar}
-              />
+              <Avatar uri={currentUser.avatar} name={currentUser.name} size={32} />
             )}
           </View>
         </TouchableOpacity>
@@ -196,14 +192,17 @@ export default function ChatScreen() {
           maxLength={500}
           testID="message-input"
         />
-        <TouchableOpacity
-          style={[styles.sendButton, !messageText.trim() && styles.sendButtonDisabled]}
-          onPress={handleSend}
-          disabled={!messageText.trim()}
-          testID="send-button"
-        >
-          <Send size={20} color={messageText.trim() ? '#ffffff' : Colors.light.placeholder} />
-        </TouchableOpacity>
+        <View style={styles.sendButtonWrap}>
+          {!!messageText.trim() && <HardShadow offset={4} radius={20} />}
+          <TouchableOpacity
+            style={[styles.sendButton, !messageText.trim() && styles.sendButtonDisabled]}
+            onPress={handleSend}
+            disabled={!messageText.trim()}
+            testID="send-button"
+          >
+            <Send size={20} color={messageText.trim() ? '#ffffff' : Colors.light.placeholder} strokeWidth={2.5} />
+          </TouchableOpacity>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
@@ -240,16 +239,13 @@ const styles = StyleSheet.create({
   theirMessage: {
     justifyContent: 'flex-start',
   },
-  messageAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
   messageBubble: {
     maxWidth: '70%',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 18,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: INK,
   },
   myBubble: {
     backgroundColor: Colors.light.primary,
@@ -261,6 +257,7 @@ const styles = StyleSheet.create({
   },
   messageText: {
     fontSize: 15,
+    fontWeight: '600' as const,
     color: Colors.light.text,
     lineHeight: 20,
   },
@@ -269,6 +266,7 @@ const styles = StyleSheet.create({
   },
   messageTime: {
     fontSize: 11,
+    fontWeight: '600' as const,
     color: Colors.light.textSecondary,
     marginTop: 4,
   },
@@ -280,31 +278,41 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.light.background,
-    borderTopWidth: 1,
-    borderTopColor: Colors.light.border,
+    backgroundColor: Colors.light.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 3,
+    borderColor: INK,
     gap: 8,
   },
   input: {
     flex: 1,
-    backgroundColor: Colors.light.inputBackground,
-    borderRadius: 20,
+    backgroundColor: Colors.light.background,
+    borderWidth: 2,
+    borderColor: INK,
+    borderRadius: 18,
     paddingHorizontal: 16,
     paddingVertical: 10,
     fontSize: 16,
+    fontWeight: '600' as const,
     color: Colors.light.text,
     maxHeight: 100,
+  },
+  sendButtonWrap: {
+    position: 'relative',
   },
   sendButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
+    borderWidth: 2.5,
+    borderColor: INK,
     backgroundColor: Colors.light.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: Colors.light.border,
+    backgroundColor: '#D8D3E0',
   },
   errorContainer: {
     flex: 1,
@@ -313,6 +321,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
+    fontWeight: '700' as const,
     color: Colors.light.textSecondary,
   },
 });

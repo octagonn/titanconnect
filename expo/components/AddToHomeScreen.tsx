@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Download, X } from 'lucide-react-native';
-import Colors from '@/constants/colors';
+import Colors, { INK, palette } from '@/constants/colors';
 import { showAlert } from '@/lib/alert';
+import HardShadow from '@/components/ui/HardShadow';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -70,17 +71,20 @@ export default function AddToHomeScreen() {
 
   return (
     <View style={styles.container} pointerEvents="box-none">
-      <TouchableOpacity style={styles.pill} onPress={handleInstall} activeOpacity={0.8} testID="add-to-homescreen-button">
-        <Download size={16} color="#ffffff" />
-        <Text style={styles.pillText}>Add to Home Screen</Text>
-      </TouchableOpacity>
+      <View style={styles.pillWrap}>
+        <HardShadow offset={4} radius={20} />
+        <TouchableOpacity style={styles.pill} onPress={handleInstall} activeOpacity={0.8} testID="add-to-homescreen-button">
+          <Download size={16} color="#ffffff" strokeWidth={2.5} />
+          <Text style={styles.pillText}>Add to Home Screen</Text>
+        </TouchableOpacity>
+      </View>
       <TouchableOpacity
         style={styles.dismiss}
         onPress={() => setVisible(false)}
         activeOpacity={0.8}
         testID="dismiss-add-to-homescreen"
       >
-        <X size={14} color={Colors.light.textSecondary} />
+        <X size={14} color={INK} strokeWidth={2.5} />
       </TouchableOpacity>
     </View>
   );
@@ -97,32 +101,33 @@ const styles = StyleSheet.create({
     gap: 6,
     zIndex: 60,
   },
+  pillWrap: {
+    position: 'relative',
+  },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: Colors.light.primary,
+    backgroundColor: palette.blue,
+    borderWidth: 2.5,
+    borderColor: INK,
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
+    borderRadius: 20,
   },
   pillText: {
     color: '#ffffff',
     fontSize: 13,
-    fontWeight: '600' as const,
+    fontWeight: '800' as const,
   },
   dismiss: {
-    backgroundColor: Colors.light.background,
+    backgroundColor: Colors.light.card,
     borderRadius: 12,
     width: 24,
     height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.light.border,
+    borderWidth: 2,
+    borderColor: INK,
   },
 });

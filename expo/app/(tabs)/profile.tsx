@@ -1,6 +1,6 @@
 // app/(tabs)/profile.tsx
 import { useRouter, useNavigation } from 'expo-router';
-import { LogOut, Mail, GraduationCap, Award, Heart, Edit2, Image as ImageIcon, Save, Pencil, University, Check, User } from 'lucide-react-native';
+import { LogOut, Mail, GraduationCap, Award, Heart, Edit2, Image as ImageIcon, Save, Pencil, University, Check, FileText, Users } from 'lucide-react-native';
 import { useLayoutEffect, useCallback, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Modal, TextInput, KeyboardAvoidingView, Platform, ActionSheetIOS, ActivityIndicator } from 'react-native';
 import { showAlert } from '@/lib/alert';
@@ -8,13 +8,18 @@ import * as ImagePicker from 'expo-image-picker';
 import { BlurView } from 'expo-blur';
 import { Buffer } from 'buffer';
 import * as FileSystem from 'expo-file-system/legacy';
-import Colors from '@/constants/colors';
+import Colors, { INK, palette } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabase';
 import { uploadImage } from '@/lib/storage';
 import styles from '../../styles/profile.styles';
 import { INTERESTS } from '@/constants/interests';
+import Avatar from '@/components/ui/Avatar';
+import Chip from '@/components/ui/Chip';
+import StatTile from '@/components/ui/StatTile';
+import HardShadow from '@/components/ui/HardShadow';
+import ListRow from '@/components/ui/ListRow';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -41,6 +46,7 @@ export default function ProfileScreen() {
   // Avatar states (from incoming branch)
   const [avatarUrl, setAvatarUrl] = useState(currentUser?.avatar);
   const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [showFriendsModal, setShowFriendsModal] = useState<boolean>(false);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -381,30 +387,18 @@ export default function ProfileScreen() {
         {/* -----------------------------Header Section-------------------------------------- */}
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
-            {avatarUrl ? (
-              <Image
-                key={avatarUrl} //This forces re-render when URL changes for profile pic update
-                source={{ uri: avatarUrl }}
-                style={styles.avatar}
-              />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <User size={60} color={Colors.light.textSecondary} />
-              </View>
-            )}
+            <Avatar key={avatarUrl} uri={avatarUrl} name={currentUser.name} size={120} />
 
             {/* Edit avatar_url iconbutton */}
             <TouchableOpacity style={styles.editProfileIconButton} onPress={handleProfilePicAction}>
-              <Pencil size={20} color="#ffffff" />
+              <Pencil size={20} color="#ffffff" strokeWidth={2.5} />
             </TouchableOpacity>
 
           </View>
           <Text style={styles.name}>{currentUser.name}</Text>
           <View style={styles.majorAndYearContainer}>
             <Text style={styles.major}>{currentUser.major}</Text>
-            <View style={styles.yearBadge}>
-              <Text style={styles.yearText}>{currentUser.year}</Text>
-            </View>
+            <Chip label={currentUser.year || ''} variant="solid" color={palette.orange} />
           </View>
 
           {!currentUser.bio && !isAddingBio && (
@@ -470,32 +464,29 @@ export default function ProfileScreen() {
 
         {/* Stats Section (Posts, Connections, Likes) */}
         <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{userPosts.length}</Text>
-            <Text style={styles.statLabel}>Posts</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{userConnections.length}</Text>
-            <Text style={styles.statLabel}>Connections</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{totalLikes}</Text>
-            <Text style={styles.statLabel}>Likes</Text>
-          </View>
+          <StatTile icon={FileText} value={String(userPosts.length)} label="POSTS" color={palette.amber} />
+          <StatTile
+            icon={Users}
+            value={String(userConnections.length)}
+            label="CONNECTIONS"
+            color={palette.skyBlue}
+            onPress={() => setShowFriendsModal(true)}
+          />
+          <StatTile icon={Heart} value={String(totalLikes)} label="LIKES" color={palette.orange} />
         </View>
 
         {/* Interests (Not gonna show anything unless interests exist) */}
         {currentUser.interests && currentUser.interests.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Heart size={20} color={Colors.light.primary} />
+              <View style={styles.sectionIconWell}>
+                <Heart size={16} color={INK} strokeWidth={2.5} />
+              </View>
               <Text style={styles.sectionTitle}>Interests</Text>
             </View>
             <View style={styles.interestsContainer}>
               {currentUser.interests.map((interest) => (
-                <View key={interest} style={styles.interestChip}>
-                  <Text style={styles.interestText}>{interest}</Text>
-                </View>
+                <Chip key={interest} label={interest} variant="outline" />
               ))}
             </View>
           </View>
@@ -504,10 +495,14 @@ export default function ProfileScreen() {
         {/* Academic info section   */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Award size={20} color={Colors.light.primary} />
+            <View style={styles.sectionIconWell}>
+              <Award size={16} color={INK} strokeWidth={2.5} />
+            </View>
             <Text style={styles.sectionTitle}>Academic Info</Text>
           </View>
 
+          <View style={styles.infoCardWrap}>
+          <HardShadow offset={6} radius={20} />
           <View style={styles.infoCard}>
 
             {/* Major */}
@@ -544,6 +539,7 @@ export default function ProfileScreen() {
             </View>
 
           </View>
+          </View>
         </View>
 
         {/* Date Joined text */}
@@ -572,18 +568,9 @@ export default function ProfileScreen() {
 
           <ScrollView contentContainerStyle={styles.editContent} showsVerticalScrollIndicator={false}>
             <TouchableOpacity style={styles.editAvatarWrap} onPress={pickAvatar}>
-              {avatarUri ? (
-                <Image
-                  source={{ uri: avatarUri }}
-                  style={styles.editAvatar}
-                />
-              ) : (
-                <View style={styles.editAvatarPlaceholder}>
-                  <User size={50} color={Colors.light.textSecondary} />
-                </View>
-              )}
+              <Avatar uri={avatarUri} name={currentUser.name} size={140} />
               <View style={styles.editAvatarOverlay}>
-                <ImageIcon size={18} color="#fff" />
+                <ImageIcon size={18} color="#fff" strokeWidth={2.5} />
                 <Text style={styles.editAvatarText}>{avatarUri ? 'Change photo' : 'Add photo'}</Text>
               </View>
             </TouchableOpacity>
@@ -675,6 +662,44 @@ export default function ProfileScreen() {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Instagram-style friends list, opened from the Connections stat tile */}
+      <Modal
+        visible={showFriendsModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowFriendsModal(false)}
+      >
+        <View style={styles.friendsModalContainer}>
+          <View style={styles.friendsModalHeader}>
+            <Text style={styles.friendsModalTitle}>Friends</Text>
+            <TouchableOpacity onPress={() => setShowFriendsModal(false)}>
+              <Text style={styles.friendsModalClose}>Close</Text>
+            </TouchableOpacity>
+          </View>
+          {userConnections.length === 0 ? (
+            <View style={styles.friendsModalEmpty}>
+              <Text style={styles.friendsModalEmptyText}>No friends yet.</Text>
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={styles.friendsModalList}>
+              {userConnections.map((c: any) => (
+                <ListRow
+                  key={c.id}
+                  avatarUri={c.otherUser?.avatar}
+                  avatarName={c.otherUser?.name}
+                  title={c.otherUser?.name || 'Student'}
+                  subtitle={[c.otherUser?.major, c.otherUser?.year].filter(Boolean).join(' • ')}
+                  onPress={() => {
+                    setShowFriendsModal(false);
+                    router.push(`/profile/${c.otherUser?.id}` as any);
+                  }}
+                />
+              ))}
+            </ScrollView>
+          )}
+        </View>
       </Modal>
 
       {/* Conditional Blur for when user is uploading a new profile photo */}
