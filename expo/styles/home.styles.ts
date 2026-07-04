@@ -19,9 +19,14 @@ const homeStyles = StyleSheet.create({
     },
     categoryBar: {
         flexGrow: 0,
+        flexShrink: 0,
+        zIndex: 2,
         backgroundColor: Colors.light.feedBackground,
         borderBottomWidth: 3,
         borderBottomColor: INK,
+    },
+    feedContent: {
+        flex: 1,
     },
     categoryBarContent: {
         paddingHorizontal: 16,
@@ -252,22 +257,6 @@ const homeStyles = StyleSheet.create({
     commentSubmitDisabled: {
         color: Colors.light.placeholder,
     },
-    fabWrap: {
-        position: 'absolute',
-        bottom: 100,
-        right: 24,
-        zIndex: 1,
-    },
-    fab: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        borderWidth: 3,
-        borderColor: INK,
-        backgroundColor: palette.orange,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
     modalContainer: {
         flex: 1,
         justifyContent: 'flex-end',
@@ -310,6 +299,97 @@ const homeStyles = StyleSheet.create({
         minHeight: 120,
         textAlignVertical: 'top',
         marginBottom: 16,
+    },
+    fieldLabel: {
+        fontSize: 13,
+        fontWeight: '800' as const,
+        color: Colors.light.text,
+        marginBottom: 8,
+    },
+    chipRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 12,
+    },
+    extraInput: {
+        backgroundColor: Colors.light.card,
+        borderWidth: 2,
+        borderColor: INK,
+        borderRadius: 14,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        fontSize: 14,
+        fontWeight: '600' as const,
+        color: Colors.light.text,
+        marginBottom: 12,
+    },
+    pollOptionRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    pollOptionInput: {
+        flex: 1,
+    },
+    pollOptionRemove: {
+        padding: 8,
+        marginBottom: 12,
+    },
+    addOptionButton: {
+        alignSelf: 'flex-start',
+        marginBottom: 12,
+    },
+    addOptionText: {
+        fontSize: 13,
+        fontWeight: '800' as const,
+        color: Colors.light.primary,
+    },
+    wishboneRow: {
+        flexDirection: 'row',
+        alignItems: 'stretch',
+        marginBottom: 12,
+        borderWidth: 2.5,
+        borderColor: INK,
+        borderRadius: 16,
+        overflow: 'hidden',
+        height: 160,
+    },
+    wishboneSlot: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: Colors.light.backgroundSecondary,
+    },
+    wishboneImage: {
+        width: '100%',
+        height: '100%',
+    },
+    wishboneDivider: {
+        width: 3,
+        backgroundColor: INK,
+    },
+    tagInputRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    tagInput: {
+        flex: 1,
+    },
+    addTagButton: {
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 14,
+        borderWidth: 2,
+        borderColor: INK,
+        backgroundColor: palette.skyBlue,
+        marginBottom: 12,
+    },
+    addTagButtonText: {
+        fontSize: 13,
+        fontWeight: '900' as const,
+        color: INK,
     },
     modalActions: {
         flexDirection: 'row',
@@ -486,6 +566,12 @@ const homeStyles = StyleSheet.create({
         gap: 8,
     },
     optionsItem: {
+        paddingVertical: 12,
+    },
+    createOptionItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
         paddingVertical: 12,
     },
     optionsItemText: {

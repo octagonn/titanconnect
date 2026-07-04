@@ -1,5 +1,5 @@
 import createContextHook from '@nkzw/create-context-hook';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ConnectionWithUser, Conversation } from '@/types';
 import { useAuth } from './AuthContext';
 import { trpc } from '@/lib/trpc';
@@ -7,6 +7,7 @@ import { trpc } from '@/lib/trpc';
 export const [AppContext, useApp] = createContextHook(() => {
   const { currentUser } = useAuth();
   const utils = trpc.useUtils();
+  const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
 
   const connectionsQuery = trpc.connections.list.useQuery(undefined, {
     enabled: !!currentUser,
@@ -64,5 +65,8 @@ export const [AppContext, useApp] = createContextHook(() => {
       sendMessageMutation.mutateAsync({ otherUserId: receiverId, content }),
     markMessagesAsRead: (conversationId: string) => markReadMutation.mutateAsync({ conversationId }),
     getOtherParticipant,
+    isCreateMenuOpen,
+    openCreateMenu: () => setIsCreateMenuOpen(true),
+    closeCreateMenu: () => setIsCreateMenuOpen(false),
   };
 });

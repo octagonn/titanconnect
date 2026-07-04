@@ -1,108 +1,102 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Calendar, MapPin, Star } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import HardShadow from '@/components/ui/HardShadow';
 import Chip from '@/components/ui/Chip';
 import Colors, { INK, palette } from '@/constants/colors';
-
-type EventItem = {
-  id: string;
-  title: string;
-  host: string;
-  category: 'Club' | 'Party' | 'Campus';
-  date: string;
-  location: string;
-  color: string;
-  interested: number;
-};
-
-const EVENTS: EventItem[] = [
-  {
-    id: 'e1',
-    title: 'Titan Tech Mixer',
-    host: 'CS Club',
-    category: 'Club',
-    date: 'Fri · 6:00 PM',
-    location: 'TSU Pavilion',
-    color: palette.blue,
-    interested: 42,
-  },
-  {
-    id: 'e2',
-    title: 'Beach Bonfire Night',
-    host: 'ASI',
-    category: 'Party',
-    date: 'Sat · 8:00 PM',
-    location: 'Huntington Beach',
-    color: palette.orange,
-    interested: 118,
-  },
-  {
-    id: 'e3',
-    title: 'Career Fair: Spring 2026',
-    host: 'Career Center',
-    category: 'Campus',
-    date: 'Wed · 10:00 AM',
-    location: 'TSU Ballroom',
-    color: palette.skyBlue,
-    interested: 256,
-  },
-  {
-    id: 'e4',
-    title: 'Salsa Night',
-    host: 'Latin Dance Club',
-    category: 'Club',
-    date: 'Thu · 7:00 PM',
-    location: 'Titan Student Union',
-    color: palette.amber,
-    interested: 73,
-  },
-];
-
-const CATEGORY_COLOR: Record<EventItem['category'], string> = {
-  Club: palette.skyBlue,
-  Party: palette.orange,
-  Campus: palette.amber,
-};
+import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
+import { formatScheduledAt } from '@/lib/formatSchedule';
 
 export default function EventsPreview() {
-  const [interested, setInterested] = useState<Record<string, boolean>>({});
+  const router = useRouter();
+  const { currentUser } = useAuth();
+  const utils = trpc.useUtils();
 
-  const toggle = (id: string) => setInterested((prev) => ({ ...prev, [id]: !prev[id] }));
+  const { data, isLoading } = trpc.posts.getInfinite.useInfiniteQuery(
+    { limit: 20, category: 'events' },
+    { getNextPageParam: (lastPage) => lastPage.nextCursor }
+  );
+
+  const toggleLikeMutation = trpc.posts.toggleLike.useMutation({
+    onSuccess: () => utils.posts.getInfinite.invalidate(),
+  });
+
+  const events = data?.pages.flatMap((page) => page.items) ?? [];
+
+  const toggleInterested = (postId: string) => {
+    toggleLikeMutation.mutate({ postId });
+    Haptics.selectionAsync();
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color={Colors.light.primary} />
+      </View>
+    );
+  }
+
+  if (events.length === 0) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.emptyText}>No events yet — tap + to host one.</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.list}>
-      <View style={styles.previewBanner}>
-        <Text style={styles.previewBannerText}>PREVIEW — sample events, not live yet</Text>
-      </View>
-      {EVENTS.map((event) => {
-        const isInterested = !!interested[event.id];
+      {events.map((event) => {
+        const isInterested = currentUser ? event.likedBy.includes(currentUser.id) : false;
         return (
-          <View key={event.id} style={styles.cardWrap}>
+          <TouchableOpacity
+            key={event.id}
+            style={styles.cardWrap}
+            activeOpacity={0.9}
+            onPress={() => router.push(`/post/${event.id}` as any)}
+          >
             <HardShadow offset={7} radius={22} />
             <View style={styles.card}>
-              <View style={[styles.imageBlock, { backgroundColor: event.color }]}>
+              <View style={[styles.imageBlock, { backgroundColor: palette.skyBlue }]}>
                 <Calendar size={32} color={INK} strokeWidth={2} />
               </View>
               <View style={styles.body}>
-                <View style={styles.headerRow}>
-                  <Text style={styles.title} numberOfLines={1}>{event.title}</Text>
-                  <Chip label={event.category} variant="solid" color={CATEGORY_COLOR[event.category]} size="sm" />
-                </View>
-                <Text style={styles.host}>Hosted by {event.host}</Text>
-                <View style={styles.metaRow}>
-                  <Calendar size={13} color={Colors.light.textSecondary} strokeWidth={2.5} />
-                  <Text style={styles.metaText}>{event.date}</Text>
-                  <MapPin size={13} color={Colors.light.textSecondary} strokeWidth={2.5} />
-                  <Text style={styles.metaText}>{event.location}</Text>
-                </View>
+                <Text style={styles.title} numberOfLines={1}>{event.title || 'Untitled event'}</Text>
+                <Text style={styles.host}>Hosted by {event.userName}</Text>
+                {(!!event.scheduledAt || !!event.location) && (
+                  <View style={styles.metaRow}>
+                    {!!event.scheduledAt && (
+                      <>
+                        <Calendar size={13} color={Colors.light.textSecondary} strokeWidth={2.5} />
+                        <Text style={styles.metaText}>{formatScheduledAt(event.scheduledAt)}</Text>
+                      </>
+                    )}
+                    {!!event.location && (
+                      <>
+                        <MapPin size={13} color={Colors.light.textSecondary} strokeWidth={2.5} />
+                        <Text style={styles.metaText}>{event.location}</Text>
+                      </>
+                    )}
+                  </View>
+                )}
+                {!!event.content && <Text style={styles.description}>{event.content}</Text>}
+                {!!event.tags?.length && (
+                  <View style={styles.tagRow}>
+                    {event.tags.map((tag: string) => (
+                      <Chip key={tag} label={tag} variant="outline" color={palette.skyBlue} size="sm" />
+                    ))}
+                  </View>
+                )}
                 <View style={styles.footerRow}>
-                  <Text style={styles.interestedText}>
-                    {event.interested + (isInterested ? 1 : 0)} interested
-                  </Text>
+                  <Text style={styles.interestedText}>{event.likes} interested</Text>
                   <TouchableOpacity
                     style={[styles.interestBtn, isInterested && styles.interestBtnActive]}
-                    onPress={() => toggle(event.id)}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      toggleInterested(event.id);
+                    }}
                     activeOpacity={0.8}
                   >
                     <Star size={14} color={isInterested ? '#FFFFFF' : INK} fill={isInterested ? '#FFFFFF' : 'transparent'} strokeWidth={2.5} />
@@ -113,7 +107,7 @@ export default function EventsPreview() {
                 </View>
               </View>
             </View>
-          </View>
+          </TouchableOpacity>
         );
       })}
     </View>
@@ -124,20 +118,14 @@ const styles = StyleSheet.create({
   list: {
     gap: 16,
   },
-  previewBanner: {
-    backgroundColor: palette.amber,
-    borderWidth: 2,
-    borderColor: INK,
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    alignSelf: 'flex-start',
+  centerContainer: {
+    padding: 32,
+    alignItems: 'center',
   },
-  previewBannerText: {
-    fontSize: 11,
-    fontWeight: '900' as const,
-    color: INK,
-    letterSpacing: 0.4,
+  emptyText: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: Colors.light.textSecondary,
   },
   cardWrap: {
     position: 'relative',
@@ -160,14 +148,7 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 6,
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
   title: {
-    flex: 1,
     fontSize: 16,
     fontWeight: '900' as const,
     color: INK,
@@ -176,6 +157,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600' as const,
     color: Colors.light.textSecondary,
+  },
+  description: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.light.text,
+    lineHeight: 18,
   },
   metaRow: {
     flexDirection: 'row',
@@ -188,6 +175,11 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: Colors.light.textSecondary,
     marginRight: 8,
+  },
+  tagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
   },
   footerRow: {
     flexDirection: 'row',

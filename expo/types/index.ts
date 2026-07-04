@@ -18,13 +18,27 @@ export interface Post {
   userId: string;
   userName: string;
   userAvatar?: string;
+  isOwnPost?: boolean;
   content: string;
   imageUrl?: string;
+  imageUrl2?: string;
+  title?: string;
+  scheduledAt?: string;
+  location?: string;
+  course?: string;
+  price?: number;
+  condition?: string;
+  subtype?: 'thought' | 'poll' | 'wishbone';
+  pollOptions?: { id: number; label: string }[];
+  pollVotes?: number[];
+  wishboneVotes?: [number, number];
+  myVoteIndex?: number;
+  tags?: string[];
   likes: number;
   likedBy: string[];
   comments: Comment[];
   createdAt: string;
-  category: 'all' | 'clubs' | 'events' | 'study';
+  category: 'all' | 'clubs' | 'events' | 'study' | 'anon' | 'market';
 }
 
 export interface Comment {

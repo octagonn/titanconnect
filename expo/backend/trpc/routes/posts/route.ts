@@ -2,6 +2,70 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "../../create-context";
 import { TRPCError } from "@trpc/server";
 
+function mapPost(post: any, currentUserId?: string) {
+  const isAnon = post.category === 'anon';
+  const votes: { user_id: string; option_index: number }[] = post.post_votes ?? [];
+
+  let pollVotes: number[] | undefined;
+  if (post.subtype === 'poll' && Array.isArray(post.poll_options)) {
+    pollVotes = post.poll_options.map(() => 0);
+    votes.forEach((v) => {
+      if (pollVotes![v.option_index] !== undefined) pollVotes![v.option_index]++;
+    });
+  }
+
+  let wishboneVotes: [number, number] | undefined;
+  if (post.subtype === 'wishbone') {
+    wishboneVotes = [0, 0];
+    votes.forEach((v) => {
+      if (v.option_index === 0 || v.option_index === 1) wishboneVotes![v.option_index]++;
+    });
+  }
+
+  const myVoteIndex = currentUserId
+    ? votes.find((v) => v.user_id === currentUserId)?.option_index
+    : undefined;
+
+  return {
+    id: post.id,
+    userId: post.user_id,
+    userName: isAnon ? 'Anonymous Titan' : post.profiles?.name || 'Unknown',
+    userAvatar: isAnon ? undefined : post.profiles?.avatar_url,
+    isOwnPost: currentUserId === post.user_id,
+    content: post.content,
+    imageUrl: post.image_url,
+    imageUrl2: post.image_url_2 ?? undefined,
+    title: post.title ?? undefined,
+    scheduledAt: post.scheduled_at ?? undefined,
+    location: post.location ?? undefined,
+    course: post.course ?? undefined,
+    price: post.price ?? undefined,
+    condition: post.condition ?? undefined,
+    subtype: post.subtype ?? undefined,
+    pollOptions: post.poll_options ?? undefined,
+    pollVotes,
+    wishboneVotes,
+    myVoteIndex,
+    tags: post.tags ?? undefined,
+    likes: post.likes ? post.likes.length : 0,
+    likedBy: post.likes ? post.likes.map((l: any) => l.user_id) : [],
+    comments: post.comments
+      ? post.comments
+          .map((c: any) => ({
+            id: c.id,
+            userId: c.user_id,
+            userName: c.profiles?.name || 'Unknown',
+            userAvatar: c.profiles?.avatar_url,
+            content: c.content,
+            createdAt: c.created_at,
+          }))
+          .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      : [],
+    createdAt: post.created_at,
+    category: post.category,
+  };
+}
+
 export const postsRouter = createTRPCRouter({
   getInfinite: publicProcedure
     .input(
@@ -9,10 +73,11 @@ export const postsRouter = createTRPCRouter({
         limit: z.number().min(1).max(100).default(10),
         cursor: z.string().nullish(),
         search: z.string().optional(),
+        category: z.enum(['all', 'clubs', 'events', 'study', 'anon', 'market']).optional(),
       })
     )
     .query(async ({ ctx, input }) => {
-      const { limit, cursor } = input;
+      const { limit, cursor, category } = input;
 
       let query = ctx.supabase
         .from('posts')
@@ -24,6 +89,10 @@ export const postsRouter = createTRPCRouter({
           ),
           likes (
             user_id
+          ),
+          post_votes (
+            user_id,
+            option_index
           ),
           comments (
             id,
@@ -37,6 +106,10 @@ export const postsRouter = createTRPCRouter({
           )
         `)
         .order('created_at', { ascending: false });
+
+      if (category) {
+        query = query.eq('category', category);
+      }
 
       if (cursor) {
         query = query.lt('created_at', cursor);
@@ -60,30 +133,7 @@ export const postsRouter = createTRPCRouter({
         nextCursor = nextItem?.created_at;
       }
 
-      const posts = data.map((post: any) => ({
-        id: post.id,
-        userId: post.user_id,
-        userName: post.profiles?.name || 'Unknown',
-        userAvatar: post.profiles?.avatar_url,
-        content: post.content,
-        imageUrl: post.image_url,
-        likes: post.likes ? post.likes.length : 0,
-        likedBy: post.likes ? post.likes.map((l: any) => l.user_id) : [],
-        comments: post.comments
-          ? post.comments
-              .map((c: any) => ({
-                id: c.id,
-                userId: c.user_id,
-                userName: c.profiles?.name || 'Unknown',
-                userAvatar: c.profiles?.avatar_url,
-                content: c.content,
-                createdAt: c.created_at,
-              }))
-              .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-          : [],
-        createdAt: post.created_at,
-        category: post.category,
-      }));
+      const posts = data.map((post: any) => mapPost(post, ctx.user?.id));
 
       return {
         items: posts,
@@ -110,6 +160,10 @@ export const postsRouter = createTRPCRouter({
           ),
           likes (
             user_id
+          ),
+          post_votes (
+            user_id,
+            option_index
           ),
           comments (
             id,
@@ -140,44 +194,43 @@ export const postsRouter = createTRPCRouter({
         });
       }
 
-      const post = {
-        id: data.id,
-        userId: data.user_id,
-        userName: data.profiles?.name || 'Unknown',
-        userAvatar: data.profiles?.avatar_url,
-        content: data.content,
-        imageUrl: data.image_url,
-        likes: data.likes ? data.likes.length : 0,
-        likedBy: data.likes ? data.likes.map((l: any) => l.user_id) : [],
-        comments: data.comments
-          ? data.comments
-              .map((c: any) => ({
-                id: c.id,
-                userId: c.user_id,
-                userName: c.profiles?.name || 'Unknown',
-                userAvatar: c.profiles?.avatar_url,
-                content: c.content,
-                createdAt: c.created_at,
-              }))
-              .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-          : [],
-        createdAt: data.created_at,
-        category: data.category,
-      };
-
-      return post;
+      return mapPost(data, ctx.user?.id);
     }),
 
   create: protectedProcedure
     .input(
       z.object({
         content: z.string().min(1),
-        category: z.enum(['all', 'clubs', 'events', 'study']).default('all'),
+        category: z.enum(['all', 'clubs', 'events', 'study', 'anon', 'market']).default('all'),
         imageUrl: z.string().optional(),
+        imageUrl2: z.string().optional(),
+        title: z.string().optional(),
+        scheduledAt: z.string().optional(),
+        location: z.string().optional(),
+        course: z.string().optional(),
+        price: z.number().optional(),
+        condition: z.string().optional(),
+        subtype: z.enum(['thought', 'poll', 'wishbone']).optional(),
+        pollOptions: z.array(z.string().min(1)).min(2).max(4).optional(),
+        tags: z.array(z.string().min(1)).max(6).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { content, category, imageUrl } = input;
+      const {
+        content,
+        category,
+        imageUrl,
+        imageUrl2,
+        title,
+        scheduledAt,
+        location,
+        course,
+        price,
+        condition,
+        subtype,
+        pollOptions,
+        tags,
+      } = input;
 
       const { data, error } = await ctx.supabase
         .from('posts')
@@ -186,6 +239,16 @@ export const postsRouter = createTRPCRouter({
           content,
           category,
           image_url: imageUrl,
+          image_url_2: imageUrl2,
+          title,
+          scheduled_at: scheduledAt,
+          location,
+          course,
+          price,
+          condition,
+          subtype,
+          poll_options: pollOptions ? pollOptions.map((label, id) => ({ id, label })) : undefined,
+          tags,
         })
         .select()
         .single();
@@ -340,6 +403,28 @@ export const postsRouter = createTRPCRouter({
         }
         return { liked: true };
       }
+    }),
+
+  vote: protectedProcedure
+    .input(z.object({ postId: z.string(), optionIndex: z.number().int().min(0) }))
+    .mutation(async ({ ctx, input }) => {
+      const { postId, optionIndex } = input;
+
+      const { error } = await ctx.supabase
+        .from('post_votes')
+        .upsert(
+          { post_id: postId, user_id: ctx.user.id, option_index: optionIndex },
+          { onConflict: 'post_id,user_id' }
+        );
+
+      if (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message,
+        });
+      }
+
+      return { optionIndex };
     }),
 
   addComment: protectedProcedure

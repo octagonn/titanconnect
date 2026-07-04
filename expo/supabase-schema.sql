@@ -26,7 +26,17 @@ create table if not exists public.posts (
   user_id uuid references public.profiles(id) on delete cascade not null,
   content text not null,
   image_url text,
-  category text check (category in ('all', 'clubs', 'events', 'study')) default 'all',
+  image_url_2 text,
+  category text check (category in ('all', 'clubs', 'events', 'study', 'anon', 'market')) default 'all',
+  subtype text check (subtype is null or subtype in ('thought', 'poll', 'wishbone')),
+  poll_options jsonb,
+  tags text[],
+  title text,
+  scheduled_at timestamp with time zone,
+  location text,
+  course text,
+  price numeric,
+  condition text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -36,6 +46,16 @@ create table if not exists public.likes (
   id uuid default uuid_generate_v4() primary key,
   post_id uuid references public.posts(id) on delete cascade not null,
   user_id uuid references public.profiles(id) on delete cascade not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique(post_id, user_id)
+);
+
+-- Post votes table (backs poll options and wishbone side voting)
+create table if not exists public.post_votes (
+  id uuid default uuid_generate_v4() primary key,
+  post_id uuid references public.posts(id) on delete cascade not null,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  option_index int not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   unique(post_id, user_id)
 );
@@ -109,6 +129,7 @@ create table if not exists public.conversations (
 alter table public.profiles enable row level security;
 alter table public.posts enable row level security;
 alter table public.likes enable row level security;
+alter table public.post_votes enable row level security;
 alter table public.comments enable row level security;
 alter table public.events enable row level security;
 alter table public.event_rsvps enable row level security;
@@ -157,6 +178,23 @@ create policy "Users can create likes"
 
 create policy "Users can delete their own likes"
   on public.likes for delete
+  using (auth.uid() = user_id);
+
+-- Post votes RLS Policies
+create policy "Post votes are viewable by authenticated users"
+  on public.post_votes for select
+  using (auth.role() = 'authenticated');
+
+create policy "Users can cast their own vote"
+  on public.post_votes for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can change their own vote"
+  on public.post_votes for update
+  using (auth.uid() = user_id);
+
+create policy "Users can remove their own vote"
+  on public.post_votes for delete
   using (auth.uid() = user_id);
 
 -- Comments RLS Policies
@@ -310,6 +348,8 @@ create index if not exists posts_user_id_idx on public.posts(user_id);
 create index if not exists posts_created_at_idx on public.posts(created_at desc);
 create index if not exists likes_post_id_idx on public.likes(post_id);
 create index if not exists likes_user_id_idx on public.likes(user_id);
+create index if not exists post_votes_post_id_idx on public.post_votes(post_id);
+create index if not exists post_votes_user_id_idx on public.post_votes(user_id);
 create index if not exists comments_post_id_idx on public.comments(post_id);
 create index if not exists events_date_idx on public.events(date);
 create index if not exists event_rsvps_event_id_idx on public.event_rsvps(event_id);

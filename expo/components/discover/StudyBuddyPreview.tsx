@@ -1,110 +1,122 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { BookOpen, Clock, MapPin } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import HardShadow from '@/components/ui/HardShadow';
 import Avatar from '@/components/ui/Avatar';
+import Chip from '@/components/ui/Chip';
 import Colors, { INK, palette } from '@/constants/colors';
-
-type StudyGroup = {
-  id: string;
-  course: string;
-  topic: string;
-  host: string;
-  when: string;
-  where: string;
-  spotsFilled: number;
-  spotsTotal: number;
-  color: string;
-};
-
-const GROUPS: StudyGroup[] = [
-  {
-    id: 's1',
-    course: 'CPSC 335',
-    topic: 'Algorithms Study Group',
-    host: 'Maya R.',
-    when: 'Tue & Thu · 5:00 PM',
-    where: 'Pollak Library, 3rd Floor',
-    spotsFilled: 4,
-    spotsTotal: 6,
-    color: palette.skyBlue,
-  },
-  {
-    id: 's2',
-    course: 'MATH 250B',
-    topic: 'Calc III Partners',
-    host: 'Devon K.',
-    when: 'Mon · 3:00 PM',
-    where: 'Online (Zoom)',
-    spotsFilled: 2,
-    spotsTotal: 4,
-    color: palette.amber,
-  },
-  {
-    id: 's3',
-    course: 'ACCT 301',
-    topic: 'Looking for 1-on-1 partner',
-    host: 'Priya S.',
-    when: 'Flexible',
-    where: 'McCarthy Hall',
-    spotsFilled: 0,
-    spotsTotal: 1,
-    color: palette.orange,
-  },
-];
+import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
+import { formatScheduledAt } from '@/lib/formatSchedule';
 
 export default function StudyBuddyPreview() {
-  const [joined, setJoined] = useState<Record<string, boolean>>({});
+  const router = useRouter();
+  const { currentUser } = useAuth();
+  const utils = trpc.useUtils();
 
-  const toggle = (id: string) => setJoined((prev) => ({ ...prev, [id]: !prev[id] }));
+  const { data, isLoading } = trpc.posts.getInfinite.useInfiniteQuery(
+    { limit: 20, category: 'study' },
+    { getNextPageParam: (lastPage) => lastPage.nextCursor }
+  );
+
+  const toggleLikeMutation = trpc.posts.toggleLike.useMutation({
+    onSuccess: () => utils.posts.getInfinite.invalidate(),
+  });
+
+  const groups = data?.pages.flatMap((page) => page.items) ?? [];
+
+  const toggleJoin = (postId: string) => {
+    toggleLikeMutation.mutate({ postId });
+    Haptics.selectionAsync();
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color={Colors.light.primary} />
+      </View>
+    );
+  }
+
+  if (groups.length === 0) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.emptyText}>No study groups yet — tap + to start one.</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.list}>
-      <View style={styles.previewBanner}>
-        <Text style={styles.previewBannerText}>PREVIEW — sample groups, not live yet</Text>
-      </View>
-      {GROUPS.map((group) => {
-        const isJoined = !!joined[group.id];
-        const filled = group.spotsFilled + (isJoined ? 1 : 0);
-        const full = filled >= group.spotsTotal;
+      {groups.map((group) => {
+        const isJoined = currentUser ? group.likedBy.includes(currentUser.id) : false;
         return (
-          <View key={group.id} style={styles.cardWrap}>
+          <TouchableOpacity
+            key={group.id}
+            style={styles.cardWrap}
+            activeOpacity={0.9}
+            onPress={() => router.push(`/post/${group.id}` as any)}
+          >
             <HardShadow offset={6} radius={20} />
             <View style={styles.card}>
               <View style={styles.headerRow}>
-                <View style={[styles.courseWell, { backgroundColor: group.color }]}>
+                <View style={[styles.courseWell, { backgroundColor: palette.skyBlue }]}>
                   <BookOpen size={18} color={INK} strokeWidth={2.5} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.course}>{group.course}</Text>
-                  <Text style={styles.topic}>{group.topic}</Text>
+                  <Text style={styles.course}>{group.course || 'Study group'}</Text>
+                  <Text style={styles.topic}>{group.title || group.content}</Text>
                 </View>
               </View>
 
-              <View style={styles.metaRow}>
-                <Clock size={13} color={Colors.light.textSecondary} strokeWidth={2.5} />
-                <Text style={styles.metaText}>{group.when}</Text>
-                <MapPin size={13} color={Colors.light.textSecondary} strokeWidth={2.5} />
-                <Text style={styles.metaText}>{group.where}</Text>
-              </View>
+              {(!!group.scheduledAt || !!group.location) && (
+                <View style={styles.metaRow}>
+                  {!!group.scheduledAt && (
+                    <>
+                      <Clock size={13} color={Colors.light.textSecondary} strokeWidth={2.5} />
+                      <Text style={styles.metaText}>{formatScheduledAt(group.scheduledAt)}</Text>
+                    </>
+                  )}
+                  {!!group.location && (
+                    <>
+                      <MapPin size={13} color={Colors.light.textSecondary} strokeWidth={2.5} />
+                      <Text style={styles.metaText}>{group.location}</Text>
+                    </>
+                  )}
+                </View>
+              )}
+
+              {!!group.title && <Text style={styles.description}>{group.content}</Text>}
+
+              {!!group.tags?.length && (
+                <View style={styles.tagRow}>
+                  {group.tags.map((tag: string) => (
+                    <Chip key={tag} label={tag} variant="outline" color={palette.skyBlue} size="sm" />
+                  ))}
+                </View>
+              )}
 
               <View style={styles.footerRow}>
                 <View style={styles.hostRow}>
-                  <Avatar name={group.host} size={28} />
-                  <Text style={styles.hostText}>{group.host} · {filled}/{group.spotsTotal} spots</Text>
+                  <Avatar name={group.userName} uri={group.userAvatar} size={28} />
+                  <Text style={styles.hostText}>{group.userName} · {group.likes} joined</Text>
                 </View>
                 <TouchableOpacity
-                  style={[styles.joinBtn, isJoined && styles.joinBtnActive, full && !isJoined && styles.joinBtnFull]}
-                  onPress={() => !(full && !isJoined) && toggle(group.id)}
+                  style={[styles.joinBtn, isJoined && styles.joinBtnActive]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    toggleJoin(group.id);
+                  }}
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.joinBtnText, isJoined && styles.joinBtnTextActive]}>
-                    {isJoined ? 'Joined' : full ? 'Full' : 'Join'}
+                    {isJoined ? 'Joined' : 'Join'}
                   </Text>
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
+          </TouchableOpacity>
         );
       })}
     </View>
@@ -115,20 +127,14 @@ const styles = StyleSheet.create({
   list: {
     gap: 16,
   },
-  previewBanner: {
-    backgroundColor: palette.amber,
-    borderWidth: 2,
-    borderColor: INK,
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    alignSelf: 'flex-start',
+  centerContainer: {
+    padding: 32,
+    alignItems: 'center',
   },
-  previewBannerText: {
-    fontSize: 11,
-    fontWeight: '900' as const,
-    color: INK,
-    letterSpacing: 0.4,
+  emptyText: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: Colors.light.textSecondary,
   },
   cardWrap: {
     position: 'relative',
@@ -165,6 +171,12 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: Colors.light.textSecondary,
   },
+  description: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.light.text,
+    lineHeight: 18,
+  },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -176,6 +188,11 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: Colors.light.textSecondary,
     marginRight: 8,
+  },
+  tagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
   },
   footerRow: {
     flexDirection: 'row',
@@ -203,9 +220,6 @@ const styles = StyleSheet.create({
   },
   joinBtnActive: {
     backgroundColor: '#FFFFFF',
-  },
-  joinBtnFull: {
-    backgroundColor: '#D8D3E0',
   },
   joinBtnText: {
     fontSize: 12,

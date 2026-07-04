@@ -1,4 +1,4 @@
-import { Heart, MessageCircle, Mail, BookOpenText, Plus, Image as ImageIcon, X, MoreHorizontal, Award, GraduationCap, University, Rss, Calendar, BookOpen, Ghost, ShoppingBag } from 'lucide-react-native';
+import { Heart, MessageCircle, Mail, BookOpenText, Image as ImageIcon, X, MoreHorizontal, Award, GraduationCap, University, Rss, Calendar, BookOpen, Ghost, ShoppingBag } from 'lucide-react-native';
 import { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView } from 'react-native';
 import { showAlert } from '@/lib/alert';
@@ -6,6 +6,7 @@ import { getFriendlyErrorMessage } from '@/lib/errors';
 import * as ImagePicker from 'expo-image-picker';
 import Colors, { INK, palette } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
+import { useApp } from '@/contexts/AppContext';
 import { Post, Comment } from '@/types';
 import { trpc } from '@/lib/trpc';
 import { uploadImage } from '@/lib/storage';
@@ -29,13 +30,93 @@ const CATEGORIES = [
 ] as const;
 type CategoryKey = typeof CATEGORIES[number]['key'];
 
+type CreateType = 'all' | 'events' | 'study' | 'anon' | 'market';
+
+const CREATE_OPTIONS: { type: CreateType; label: string; icon: typeof Rss }[] = [
+  { type: 'all', label: 'Post', icon: Rss },
+  { type: 'events', label: 'Event', icon: Calendar },
+  { type: 'study', label: 'Study Buddy', icon: BookOpen },
+  { type: 'anon', label: 'Anonymous Post', icon: Ghost },
+  { type: 'market', label: 'Marketplace Listing', icon: ShoppingBag },
+];
+
+const CREATE_TITLES: Record<CreateType, string> = {
+  all: 'Create Post',
+  events: 'Create Event',
+  study: 'Create Study Buddy Post',
+  anon: 'Create Anonymous Post',
+  market: 'Create Marketplace Listing',
+};
+
+const DAY_OFFSETS = [0, 1, 2, 3, 4, 5, 6];
+
+function dayLabel(offset: number): string {
+  if (offset === 0) return 'Today';
+  if (offset === 1) return 'Tomorrow';
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return d.toLocaleDateString(undefined, { weekday: 'short' });
+}
+
+const TIME_SLOTS: { hour: number; label: string }[] = [
+  { hour: 9, label: '9:00 AM' },
+  { hour: 12, label: '12:00 PM' },
+  { hour: 15, label: '3:00 PM' },
+  { hour: 18, label: '6:00 PM' },
+  { hour: 21, label: '9:00 PM' },
+];
+
+const LOCATION_OPTIONS = ['TSU', 'Pollak Library', 'McCarthy Hall', 'Titan Stadium', 'Online / Zoom', 'Other'];
+
+const CONDITION_OPTIONS = ['New', 'Like New', 'Good', 'Fair', 'Used'];
+
+const PRICE_PRESETS: { label: string; value: number }[] = [
+  { label: 'Free', value: 0 },
+  { label: '$5', value: 5 },
+  { label: '$10', value: 10 },
+  { label: '$20', value: 20 },
+  { label: '$50', value: 50 },
+  { label: '$100+', value: 100 },
+];
+
+type AnonSubtype = 'thought' | 'poll' | 'wishbone';
+
+const ANON_SUBTYPES: { key: AnonSubtype; label: string }[] = [
+  { key: 'thought', label: 'Random Thought' },
+  { key: 'poll', label: 'Poll' },
+  { key: 'wishbone', label: 'Wishbone' },
+];
+
+const TAG_PRESETS: Partial<Record<CreateType, string[]>> = {
+  events: ['Free Food', 'Free', 'Club', 'Sports', 'Social', 'Academic', 'Greek Life'],
+  study: ['Exam Prep', 'Homework Help', 'Group Project', 'Weekly', 'Drop-in'],
+  market: ['Free Food', 'Textbooks', 'Furniture', 'Electronics', 'Clothing', 'Tickets', 'Free'],
+};
+
 export default function HomeScreen() {
   const { currentUser } = useAuth();
   const router = useRouter();
+  const { isCreateMenuOpen, closeCreateMenu } = useApp();
   const [category, setCategory] = useState<CategoryKey>('feed');
   const [showCreatePost, setShowCreatePost] = useState<boolean>(false);
+  const [createType, setCreateType] = useState<CreateType>('all');
   const [newPostContent, setNewPostContent] = useState<string>('');
+  const [newTitle, setNewTitle] = useState<string>('');
+  const [selectedDayOffset, setSelectedDayOffset] = useState<number | null>(null);
+  const [selectedHour, setSelectedHour] = useState<number | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
+  const [customLocation, setCustomLocation] = useState<string>('');
+  const [newCourse, setNewCourse] = useState<string>('');
+  const [newPrice, setNewPrice] = useState<string>('');
+  const [selectedPriceOption, setSelectedPriceOption] = useState<string | null>(null);
+  const [selectedCondition, setSelectedCondition] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [anonSubtype, setAnonSubtype] = useState<AnonSubtype>('thought');
+  const [pollOptionInputs, setPollOptionInputs] = useState<string[]>(['', '']);
+  const [wishboneLeftImage, setWishboneLeftImage] = useState<string | null>(null);
+  const [wishboneRightImage, setWishboneRightImage] = useState<string | null>(null);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [customTag, setCustomTag] = useState<string>('');
   const [showComments, setShowComments] = useState<string | null>(null);
   const [commentText, setCommentText] = useState<string>('');
   const [isPosting, setIsPosting] = useState(false);
@@ -87,11 +168,31 @@ export default function HomeScreen() {
 
   const posts = data?.pages.flatMap((page) => page.items) ?? [];
 
+  const resetCreateForm = () => {
+    setNewPostContent('');
+    setNewTitle('');
+    setSelectedDayOffset(null);
+    setSelectedHour(null);
+    setSelectedLocation(null);
+    setCustomLocation('');
+    setNewCourse('');
+    setNewPrice('');
+    setSelectedPriceOption(null);
+    setSelectedCondition(null);
+    setSelectedImage(null);
+    setAnonSubtype('thought');
+    setPollOptionInputs(['', '']);
+    setWishboneLeftImage(null);
+    setWishboneRightImage(null);
+    setSelectedTags([]);
+    setCustomTag('');
+    setCreateType('all');
+  };
+
   const createPostMutation = trpc.posts.create.useMutation({
     onSuccess: () => {
       utils.posts.getInfinite.invalidate();
-      setNewPostContent('');
-      setSelectedImage(null);
+      resetCreateForm();
       setShowCreatePost(false);
       setIsPosting(false);
     },
@@ -180,7 +281,7 @@ export default function HomeScreen() {
     },
   });
 
-  const pickImage = async () => {
+  const pickImageInto = async (setter: (uri: string) => void) => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -189,35 +290,124 @@ export default function HomeScreen() {
     });
 
     if (!result.canceled) {
-      setSelectedImage(result.assets[0].uri);
+      setter(result.assets[0].uri);
     }
   };
 
-  const handleCreatePost = async () => {
-    if (!newPostContent.trim() && !selectedImage) return;
+  const pickImage = () => pickImageInto(setSelectedImage);
 
-    console.log('Creating post...', { content: newPostContent, hasImage: !!selectedImage });
+  const updatePollOption = (index: number, text: string) => {
+    setPollOptionInputs((prev) => prev.map((opt, i) => (i === index ? text : opt)));
+  };
+
+  const addPollOption = () => {
+    setPollOptionInputs((prev) => (prev.length < 4 ? [...prev, ''] : prev));
+  };
+
+  const removePollOption = (index: number) => {
+    setPollOptionInputs((prev) => (prev.length > 2 ? prev.filter((_, i) => i !== index) : prev));
+  };
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags((prev) => {
+      if (prev.includes(tag)) return prev.filter((t) => t !== tag);
+      return prev.length < 6 ? [...prev, tag] : prev;
+    });
+  };
+
+  const addCustomTag = () => {
+    const tag = customTag.trim();
+    if (tag && !selectedTags.includes(tag) && selectedTags.length < 6) {
+      setSelectedTags((prev) => [...prev, tag]);
+    }
+    setCustomTag('');
+  };
+
+  const isCreateFormValid = () => {
+    if (createType === 'anon' && anonSubtype === 'poll') {
+      return newTitle.trim().length > 0 && pollOptionInputs.filter((o) => o.trim()).length >= 2;
+    }
+    if (createType === 'anon' && anonSubtype === 'wishbone') {
+      return !!wishboneLeftImage && !!wishboneRightImage;
+    }
+    return !!newPostContent.trim() || !!selectedImage;
+  };
+
+  const handleCreatePost = async () => {
+    if (!isCreateFormValid()) return;
+
     setIsPosting(true);
     try {
-      let imageUrl = undefined;
-      if (selectedImage) {
-        console.log('Uploading image...');
-        const uploadedUrl = await uploadImage('posts', selectedImage);
-        if (uploadedUrl) {
-          imageUrl = uploadedUrl;
-          console.log('Image uploaded:', imageUrl);
-        } else {
-          showAlert('Error', 'Failed to upload image');
+      let imageUrl: string | undefined;
+      let imageUrl2: string | undefined;
+      let content = newPostContent.trim();
+      let subtype: AnonSubtype | undefined;
+      let pollOptions: string[] | undefined;
+
+      if (createType === 'anon' && anonSubtype === 'poll') {
+        subtype = 'poll';
+        content = newTitle.trim();
+        pollOptions = pollOptionInputs.map((o) => o.trim()).filter(Boolean);
+      } else if (createType === 'anon' && anonSubtype === 'wishbone') {
+        subtype = 'wishbone';
+        content = newPostContent.trim() || 'This or that?';
+        const [uploadedLeft, uploadedRight] = await Promise.all([
+          uploadImage('posts', wishboneLeftImage!),
+          uploadImage('posts', wishboneRightImage!),
+        ]);
+        if (!uploadedLeft || !uploadedRight) {
+          showAlert('Error', 'Failed to upload images');
           setIsPosting(false);
           return;
         }
+        imageUrl = uploadedLeft;
+        imageUrl2 = uploadedRight;
+      } else {
+        if (createType === 'anon') subtype = 'thought';
+        if (selectedImage) {
+          const uploadedUrl = await uploadImage('posts', selectedImage);
+          if (!uploadedUrl) {
+            showAlert('Error', 'Failed to upload image');
+            setIsPosting(false);
+            return;
+          }
+          imageUrl = uploadedUrl;
+        }
       }
 
-      console.log('Mutating createPost...');
+      let scheduledAt: string | undefined;
+      if (selectedDayOffset !== null && selectedHour !== null) {
+        const dt = new Date();
+        dt.setDate(dt.getDate() + selectedDayOffset);
+        dt.setHours(selectedHour, 0, 0, 0);
+        scheduledAt = dt.toISOString();
+      }
+      const location =
+        selectedLocation === 'Other' ? customLocation.trim() || undefined : selectedLocation ?? undefined;
+
+      let price: number | undefined;
+      if (selectedPriceOption === 'Custom') {
+        price = newPrice.trim() ? Number(newPrice.trim()) : undefined;
+      } else if (selectedPriceOption === 'Free') {
+        price = 0;
+      } else if (selectedPriceOption) {
+        price = Number(selectedPriceOption.replace(/[^0-9.]/g, ''));
+      }
+
       await createPostMutation.mutateAsync({
-        content: newPostContent.trim(),
-        category: 'all',
+        content,
+        category: createType,
         imageUrl,
+        imageUrl2,
+        title: createType !== 'anon' ? newTitle.trim() || undefined : undefined,
+        subtype,
+        pollOptions,
+        scheduledAt,
+        location,
+        course: newCourse.trim() || undefined,
+        price,
+        condition: selectedCondition ?? undefined,
+        tags: selectedTags.length ? selectedTags : undefined,
       });
     } catch (error) {
       // Error handled in mutation onError
@@ -657,6 +847,22 @@ export default function HomeScreen() {
     );
   };
 
+  const contentPlaceholder =
+    createType === 'market'
+      ? 'Describe the item...'
+      : createType === 'events'
+      ? "What's happening?"
+      : createType === 'study'
+      ? 'What do you need help with?'
+      : createType === 'anon'
+      ? 'Share anonymously...'
+      : "What's on your mind?";
+
+  const closeCreatePostModal = () => {
+    setShowCreatePost(false);
+    resetCreateForm();
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -692,6 +898,7 @@ export default function HomeScreen() {
             </View>
           ) : (
             <FlatList
+              style={styles.feedContent}
               data={posts}
               renderItem={renderPost}
               keyExtractor={(item) => item.id}
@@ -711,28 +918,50 @@ export default function HomeScreen() {
               }
             />
           )}
-
-          <View style={styles.fabWrap}>
-            <HardShadow offset={5} radius={30} />
-            <TouchableOpacity
-              style={styles.fab}
-              onPress={() => setShowCreatePost(true)}
-              testID="create-post-button"
-            >
-              <Plus size={24} color="#ffffff" strokeWidth={2.5} />
-            </TouchableOpacity>
-          </View>
         </>
       )}
 
       {category !== 'feed' && (
-        <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.feedContent} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
           {category === 'events' && <EventsPreview />}
           {category === 'study' && <StudyBuddyPreview />}
           {category === 'anon' && <AnonymousPreview />}
           {category === 'market' && <MarketplacePreview />}
         </ScrollView>
       )}
+
+      <Modal
+        visible={isCreateMenuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={closeCreateMenu}
+      >
+        <TouchableOpacity style={styles.optionsOverlay} activeOpacity={1} onPress={closeCreateMenu}>
+          <View style={styles.optionsCard}>
+            {CREATE_OPTIONS.map((option) => {
+              const Icon = option.icon;
+              return (
+                <TouchableOpacity
+                  key={option.type}
+                  style={styles.createOptionItem}
+                  onPress={() => {
+                    closeCreateMenu();
+                    setCreateType(option.type);
+                    setShowCreatePost(true);
+                  }}
+                  testID={`create-option-${option.type}`}
+                >
+                  <Icon size={18} color={INK} strokeWidth={2.5} />
+                  <Text style={styles.optionsItemText}>{option.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity style={styles.optionsCancel} onPress={closeCreateMenu}>
+              <Text style={styles.optionsCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <Modal
         visible={!!postOptionsId}
@@ -806,7 +1035,7 @@ export default function HomeScreen() {
         visible={showCreatePost}
         animationType="slide"
         transparent
-        onRequestClose={() => setShowCreatePost(false)}
+        onRequestClose={closeCreatePostModal}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -814,24 +1043,286 @@ export default function HomeScreen() {
         >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Create Post</Text>
-              <TouchableOpacity onPress={() => setShowCreatePost(false)}>
+              <Text style={styles.modalTitle}>{CREATE_TITLES[createType]}</Text>
+              <TouchableOpacity onPress={closeCreatePostModal}>
                 <Text style={styles.modalClose}>Cancel</Text>
               </TouchableOpacity>
             </View>
 
-            <TextInput
-              style={styles.postInput}
-              placeholder="What's on your mind?"
-              placeholderTextColor={Colors.light.placeholder}
-              value={newPostContent}
-              onChangeText={setNewPostContent}
-              multiline
-              autoFocus
-              testID="post-content-input"
-            />
+            {(createType === 'events' || createType === 'study' || createType === 'market') && (
+              <TextInput
+                style={styles.extraInput}
+                placeholder={createType === 'market' ? 'Item name' : createType === 'study' ? 'Topic' : 'Event title'}
+                placeholderTextColor={Colors.light.placeholder}
+                value={newTitle}
+                onChangeText={setNewTitle}
+                testID="post-title-input"
+              />
+            )}
 
-            {selectedImage && (
+            {createType === 'study' && (
+              <TextInput
+                style={styles.extraInput}
+                placeholder="Course (e.g. CPSC 335)"
+                placeholderTextColor={Colors.light.placeholder}
+                value={newCourse}
+                onChangeText={setNewCourse}
+                testID="post-course-input"
+              />
+            )}
+
+            {createType === 'anon' && (
+              <>
+                <Text style={styles.fieldLabel}>Type</Text>
+                <View style={styles.chipRow}>
+                  {ANON_SUBTYPES.map((st) => (
+                    <Chip
+                      key={st.key}
+                      label={st.label}
+                      variant={anonSubtype === st.key ? 'solid' : 'outline'}
+                      color={palette.navy}
+                      onPress={() => setAnonSubtype(st.key)}
+                    />
+                  ))}
+                </View>
+              </>
+            )}
+
+            {createType === 'anon' && anonSubtype === 'poll' && (
+              <>
+                <TextInput
+                  style={styles.extraInput}
+                  placeholder="Ask a question..."
+                  placeholderTextColor={Colors.light.placeholder}
+                  value={newTitle}
+                  onChangeText={setNewTitle}
+                  testID="poll-question-input"
+                />
+                <Text style={styles.fieldLabel}>Options</Text>
+                {pollOptionInputs.map((opt, i) => (
+                  <View key={i} style={styles.pollOptionRow}>
+                    <TextInput
+                      style={[styles.extraInput, styles.pollOptionInput]}
+                      placeholder={`Option ${i + 1}`}
+                      placeholderTextColor={Colors.light.placeholder}
+                      value={opt}
+                      onChangeText={(text) => updatePollOption(i, text)}
+                      testID={`poll-option-input-${i}`}
+                    />
+                    {pollOptionInputs.length > 2 && (
+                      <TouchableOpacity
+                        onPress={() => removePollOption(i)}
+                        style={styles.pollOptionRemove}
+                      >
+                        <X size={16} color={Colors.light.textSecondary} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+                {pollOptionInputs.length < 4 && (
+                  <TouchableOpacity onPress={addPollOption} style={styles.addOptionButton}>
+                    <Text style={styles.addOptionText}>+ Add option</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+
+            {createType === 'anon' && anonSubtype === 'wishbone' && (
+              <>
+                <Text style={styles.fieldLabel}>Two photos — people vote a side</Text>
+                <View style={styles.wishboneRow}>
+                  <TouchableOpacity
+                    style={styles.wishboneSlot}
+                    onPress={() => pickImageInto(setWishboneLeftImage)}
+                    testID="wishbone-left-picker"
+                  >
+                    {wishboneLeftImage ? (
+                      <Image source={{ uri: wishboneLeftImage }} style={styles.wishboneImage} />
+                    ) : (
+                      <ImageIcon size={28} color={INK} strokeWidth={2} />
+                    )}
+                  </TouchableOpacity>
+                  <View style={styles.wishboneDivider} />
+                  <TouchableOpacity
+                    style={styles.wishboneSlot}
+                    onPress={() => pickImageInto(setWishboneRightImage)}
+                    testID="wishbone-right-picker"
+                  >
+                    {wishboneRightImage ? (
+                      <Image source={{ uri: wishboneRightImage }} style={styles.wishboneImage} />
+                    ) : (
+                      <ImageIcon size={28} color={INK} strokeWidth={2} />
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            {(createType === 'events' || createType === 'study') && (
+              <>
+                <Text style={styles.fieldLabel}>When?</Text>
+                <View style={styles.chipRow}>
+                  {DAY_OFFSETS.map((offset) => (
+                    <Chip
+                      key={offset}
+                      label={dayLabel(offset)}
+                      variant={selectedDayOffset === offset ? 'solid' : 'outline'}
+                      color={palette.blue}
+                      onPress={() => setSelectedDayOffset(offset)}
+                    />
+                  ))}
+                </View>
+                <View style={styles.chipRow}>
+                  {TIME_SLOTS.map((slot) => (
+                    <Chip
+                      key={slot.hour}
+                      label={slot.label}
+                      variant={selectedHour === slot.hour ? 'solid' : 'outline'}
+                      color={palette.blue}
+                      onPress={() => setSelectedHour(slot.hour)}
+                    />
+                  ))}
+                </View>
+
+                <Text style={styles.fieldLabel}>Where?</Text>
+                <View style={styles.chipRow}>
+                  {LOCATION_OPTIONS.map((option) => (
+                    <Chip
+                      key={option}
+                      label={option}
+                      variant={selectedLocation === option ? 'solid' : 'outline'}
+                      color={palette.orange}
+                      onPress={() => setSelectedLocation(option)}
+                    />
+                  ))}
+                </View>
+                {selectedLocation === 'Other' && (
+                  <TextInput
+                    style={styles.extraInput}
+                    placeholder="Enter a location"
+                    placeholderTextColor={Colors.light.placeholder}
+                    value={customLocation}
+                    onChangeText={setCustomLocation}
+                    testID="post-custom-location-input"
+                  />
+                )}
+              </>
+            )}
+
+            {createType === 'market' && (
+              <>
+                <Text style={styles.fieldLabel}>Price</Text>
+                <View style={styles.chipRow}>
+                  {PRICE_PRESETS.map((preset) => (
+                    <Chip
+                      key={preset.label}
+                      label={preset.label}
+                      variant={selectedPriceOption === preset.label ? 'solid' : 'outline'}
+                      color={palette.amber}
+                      onPress={() =>
+                        setSelectedPriceOption(selectedPriceOption === preset.label ? null : preset.label)
+                      }
+                    />
+                  ))}
+                  <Chip
+                    label="Custom"
+                    variant={selectedPriceOption === 'Custom' ? 'solid' : 'outline'}
+                    color={palette.amber}
+                    onPress={() =>
+                      setSelectedPriceOption(selectedPriceOption === 'Custom' ? null : 'Custom')
+                    }
+                  />
+                </View>
+                {selectedPriceOption === 'Custom' && (
+                  <TextInput
+                    style={styles.extraInput}
+                    placeholder="Enter a price"
+                    placeholderTextColor={Colors.light.placeholder}
+                    value={newPrice}
+                    onChangeText={setNewPrice}
+                    keyboardType="numeric"
+                    testID="post-price-input"
+                  />
+                )}
+                <Text style={styles.fieldLabel}>Condition (optional)</Text>
+                <View style={styles.chipRow}>
+                  {CONDITION_OPTIONS.map((option) => (
+                    <Chip
+                      key={option}
+                      label={option}
+                      variant={selectedCondition === option ? 'solid' : 'outline'}
+                      color={palette.orange}
+                      onPress={() => setSelectedCondition(selectedCondition === option ? null : option)}
+                    />
+                  ))}
+                </View>
+              </>
+            )}
+
+            {TAG_PRESETS[createType] && (
+              <>
+                <Text style={styles.fieldLabel}>Tags (optional)</Text>
+                <View style={styles.chipRow}>
+                  {TAG_PRESETS[createType]!.map((tag) => (
+                    <Chip
+                      key={tag}
+                      label={tag}
+                      variant={selectedTags.includes(tag) ? 'solid' : 'outline'}
+                      color={palette.skyBlue}
+                      onPress={() => toggleTag(tag)}
+                    />
+                  ))}
+                </View>
+                <View style={styles.tagInputRow}>
+                  <TextInput
+                    style={[styles.extraInput, styles.tagInput]}
+                    placeholder="Add a custom tag"
+                    placeholderTextColor={Colors.light.placeholder}
+                    value={customTag}
+                    onChangeText={setCustomTag}
+                    onSubmitEditing={addCustomTag}
+                    testID="custom-tag-input"
+                  />
+                  <TouchableOpacity onPress={addCustomTag} style={styles.addTagButton}>
+                    <Text style={styles.addTagButtonText}>Add</Text>
+                  </TouchableOpacity>
+                </View>
+                {selectedTags.filter((t) => !TAG_PRESETS[createType]!.includes(t)).length > 0 && (
+                  <View style={styles.chipRow}>
+                    {selectedTags
+                      .filter((t) => !TAG_PRESETS[createType]!.includes(t))
+                      .map((tag) => (
+                        <Chip
+                          key={tag}
+                          label={`${tag} ✕`}
+                          variant="solid"
+                          color={palette.skyBlue}
+                          onPress={() => toggleTag(tag)}
+                        />
+                      ))}
+                  </View>
+                )}
+              </>
+            )}
+
+            {!(createType === 'anon' && anonSubtype === 'poll') && (
+              <TextInput
+                style={styles.postInput}
+                placeholder={
+                  createType === 'anon' && anonSubtype === 'wishbone'
+                    ? 'Add a caption (optional)'
+                    : contentPlaceholder
+                }
+                placeholderTextColor={Colors.light.placeholder}
+                value={newPostContent}
+                onChangeText={setNewPostContent}
+                multiline
+                autoFocus={!(createType === 'anon' && anonSubtype === 'wishbone')}
+                testID="post-content-input"
+              />
+            )}
+
+            {!(createType === 'anon' && (anonSubtype === 'poll' || anonSubtype === 'wishbone')) && selectedImage && (
               <View style={styles.selectedImageContainer}>
                 <Image source={{ uri: selectedImage }} style={styles.selectedImage} />
                 <TouchableOpacity
@@ -844,21 +1335,18 @@ export default function HomeScreen() {
             )}
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.imageButton} onPress={pickImage} testID="pick-image-button">
-                <ImageIcon size={24} color={INK} strokeWidth={2.5} />
-              </TouchableOpacity>
+              {!(createType === 'anon' && (anonSubtype === 'poll' || anonSubtype === 'wishbone')) && (
+                <TouchableOpacity style={styles.imageButton} onPress={pickImage} testID="pick-image-button">
+                  <ImageIcon size={24} color={INK} strokeWidth={2.5} />
+                </TouchableOpacity>
+              )}
 
               <View style={styles.postButtonWrap}>
-                {!(isPosting || (!newPostContent.trim() && !selectedImage)) && (
-                  <HardShadow offset={5} radius={18} />
-                )}
+                {!(isPosting || !isCreateFormValid()) && <HardShadow offset={5} radius={18} />}
                 <TouchableOpacity
-                  style={[
-                    styles.postButton,
-                    (!newPostContent.trim() && !selectedImage) && styles.postButtonDisabled,
-                  ]}
+                  style={[styles.postButton, !isCreateFormValid() && styles.postButtonDisabled]}
                   onPress={handleCreatePost}
-                  disabled={isPosting || (!newPostContent.trim() && !selectedImage)}
+                  disabled={isPosting || !isCreateFormValid()}
                   testID="submit-post-button"
                 >
                   {isPosting ? (

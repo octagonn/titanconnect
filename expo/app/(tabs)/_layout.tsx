@@ -8,6 +8,7 @@ import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import Colors, { INK, palette } from "@/constants/colors";
 import { useApp } from "@/contexts/AppContext";
 import NeoHeaderBackground from "@/components/ui/NeoHeaderBackground";
+import CreateMenuButton from "@/components/ui/CreateMenuButton";
 
 function NotificationBell() {
   const router = useRouter();
@@ -144,6 +145,9 @@ export default function TabLayout() {
             fontWeight: '900' as const,
             color: '#FFFFFF',
           },
+          // The navy masthead no longer prints a title — it's redundant with
+          // the bottom dock's per-tab labels (tabBarLabel/title below).
+          headerTitle: () => null,
           // Transparent scenes let the flat cream canvas underneath show through.
           sceneStyle: {
             backgroundColor: 'transparent',
@@ -156,6 +160,7 @@ export default function TabLayout() {
           title: "Discover",
           tabBarLabel: "Discover",
           tabBarIcon: ({ color }) => <Compass size={22} color={color} strokeWidth={2.5} />,
+          headerLeft: () => <CreateMenuButton />,
           headerRight: () => <NotificationBell />,
         }}
       />
