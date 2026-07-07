@@ -74,10 +74,11 @@ export const postsRouter = createTRPCRouter({
         cursor: z.string().nullish(),
         search: z.string().optional(),
         category: z.enum(['all', 'clubs', 'events', 'study', 'anon', 'market']).optional(),
+        userId: z.string().optional(),
       })
     )
     .query(async ({ ctx, input }) => {
-      const { limit, cursor, category } = input;
+      const { limit, cursor, category, userId } = input;
 
       let query = ctx.supabase
         .from('posts')
@@ -109,6 +110,12 @@ export const postsRouter = createTRPCRouter({
 
       if (category) {
         query = query.eq('category', category);
+      }
+
+      if (userId) {
+        // Anonymous posts hide their author everywhere else in the app —
+        // don't let a profile's post list deanonymize them.
+        query = query.eq('user_id', userId).neq('category', 'anon');
       }
 
       if (cursor) {
@@ -196,6 +203,58 @@ export const postsRouter = createTRPCRouter({
 
       return mapPost(data, ctx.user?.id);
     }),
+
+  getJoined: protectedProcedure.query(async ({ ctx }) => {
+    const { data: likedRows, error: likesError } = await ctx.supabase
+      .from('likes')
+      .select('post_id')
+      .eq('user_id', ctx.user.id);
+
+    if (likesError) {
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: likesError.message });
+    }
+
+    const postIds = (likedRows ?? []).map((row) => row.post_id);
+    if (postIds.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await ctx.supabase
+      .from('posts')
+      .select(`
+        *,
+        profiles (
+          name,
+          avatar_url
+        ),
+        likes (
+          user_id
+        ),
+        post_votes (
+          user_id,
+          option_index
+        ),
+        comments (
+          id,
+          user_id,
+          content,
+          created_at,
+          profiles (
+            name,
+            avatar_url
+          )
+        )
+      `)
+      .in('id', postIds)
+      .in('category', ['events', 'study', 'market'])
+      .order('scheduled_at', { ascending: true, nullsFirst: false });
+
+    if (error) {
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error.message });
+    }
+
+    return data.map((post: any) => mapPost(post, ctx.user.id));
+  }),
 
   create: protectedProcedure
     .input(

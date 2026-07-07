@@ -66,6 +66,7 @@ export default function NotificationsScreen() {
                             color={palette.blue}
                             size="sm"
                             onPress={() => respond.mutate({ connectionId: req.id, action: 'accept' })}
+                            loading={respond.isPending && respond.variables?.connectionId === req.id}
                           />
                           <Chip
                             label="Decline"
@@ -73,6 +74,7 @@ export default function NotificationsScreen() {
                             variant="outline"
                             size="sm"
                             onPress={() => respond.mutate({ connectionId: req.id, action: 'decline' })}
+                            loading={respond.isPending && respond.variables?.connectionId === req.id}
                           />
                         </View>
                       }
@@ -104,6 +106,10 @@ export default function NotificationsScreen() {
                           size="sm"
                           onPress={() =>
                             req.otherUser?.id && removeConnection.mutate({ targetUserId: req.otherUser.id })
+                          }
+                          loading={
+                            removeConnection.isPending &&
+                            removeConnection.variables?.targetUserId === req.otherUser?.id
                           }
                         />
                       }

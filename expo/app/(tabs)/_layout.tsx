@@ -1,14 +1,31 @@
 import { Tabs, useRouter } from "expo-router";
-import { Compass, QrCode, Bell, User, MessageCircle, Search as SearchIcon } from "lucide-react-native";
+import { Compass, QrCode, Bell, Calendar, User, MessageCircle, Search as SearchIcon } from "lucide-react-native";
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from "react-native";
-import { useSafeAreaInsets, EdgeInsets } from "react-native-safe-area-context";
-import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 
-import Colors, { INK, palette } from "@/constants/colors";
+import Colors, { INK } from "@/constants/colors";
 import { useApp } from "@/contexts/AppContext";
 import NeoHeaderBackground from "@/components/ui/NeoHeaderBackground";
 import CreateMenuButton from "@/components/ui/CreateMenuButton";
+
+function BrandTitle() {
+  return <Text style={styles.brandTitle}>TitanConnect</Text>;
+}
+
+function CalendarButton() {
+  const router = useRouter();
+
+  return (
+    <TouchableOpacity
+      onPress={() => router.push('/my-activity' as any)}
+      style={styles.calendarButton}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      testID="my-activity-button"
+    >
+      <Calendar size={20} color="#FFFFFF" strokeWidth={2.5} />
+    </TouchableOpacity>
+  );
+}
 
 function NotificationBell() {
   const router = useRouter();
@@ -31,91 +48,11 @@ function NotificationBell() {
   );
 }
 
-// Android's gesture/nav bar isn't reported through safe-area insets the same
-// way, so it keeps its historical fixed padding. iOS and web (incl. iOS
-// Safari, where env(safe-area-inset-bottom) reports the home-indicator
-// height once viewport-fit=cover is set — see app/+html.tsx) use the real inset.
-function getTabBarPaddingBottom(insets: EdgeInsets) {
-  return Platform.OS === 'android' ? 14 : Math.max(insets.bottom, 12);
-}
-
-function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
-  const insets = useSafeAreaInsets();
-  const paddingBottom = getTabBarPaddingBottom(insets);
-
-  // No fixed height: the bar sizes itself from its content (icon + label +
-  // item padding) plus the safe-area padding. A hardcoded height used to
-  // undercut the content by ~11px, clipping the bottom of the labels.
+function HeaderRight() {
   return (
-    <View
-      style={[styles.tabBar, { paddingBottom }]}
-      pointerEvents="box-none"
-    >
-      {state.routes.map((route, index) => {
-        const { options } = descriptors[route.key];
-        const isFocused = state.index === index;
-        const color = isFocused ? '#FFFFFF' : Colors.light.tabIconDefault;
-
-        const onPress = () => {
-          const event = navigation.emit({
-            type: 'tabPress',
-            target: route.key,
-            canPreventDefault: true,
-          });
-
-          if (!isFocused && !event.defaultPrevented) {
-            navigation.navigate(route.name);
-          }
-        };
-
-        const onLongPress = () => {
-          navigation.emit({
-            type: 'tabLongPress',
-            target: route.key,
-          });
-        };
-
-        const label =
-          options.tabBarLabel !== undefined
-            ? options.tabBarLabel
-            : options.title !== undefined
-            ? options.title
-            : route.name;
-
-        const renderIcon = options.tabBarIcon
-          ? options.tabBarIcon({ focused: isFocused, color, size: 22 })
-          : null;
-
-        return (
-          <TouchableOpacity
-            key={route.key}
-            accessibilityRole="button"
-            accessibilityState={isFocused ? { selected: true } : {}}
-            accessibilityLabel={options.tabBarAccessibilityLabel}
-            testID={options.tabBarTestID}
-            onPress={onPress}
-            onLongPress={onLongPress}
-            activeOpacity={0.6}
-            style={styles.tabItem}
-            hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
-          >
-            <View style={[styles.pill, isFocused && styles.pillActive]}>
-              {renderIcon}
-              {typeof label === 'string' ? (
-                <Text
-                  style={[styles.tabLabel, isFocused && styles.tabLabelActive]}
-                  numberOfLines={1}
-                  ellipsizeMode="clip"
-                >
-                  {label}
-                </Text>
-              ) : (
-                label
-              )}
-            </View>
-          </TouchableOpacity>
-        );
-      })}
+    <View style={styles.headerRightRow}>
+      <CalendarButton />
+      <NotificationBell />
     </View>
   );
 }
@@ -125,7 +62,11 @@ export default function TabLayout() {
 
   return (
       <Tabs
-        tabBar={(props) => <CustomTabBar {...props} />}
+        // The bottom dock is rendered once at the app root (GlobalTabBar, in
+        // app/_layout.tsx) so it stays visible over screens outside this
+        // group too (post/chat/profile detail) — this navigator only needs
+        // its screens, not its own bar.
+        tabBar={() => null}
         screenOptions={{
           tabBarActiveTintColor: '#FFFFFF',
           tabBarInactiveTintColor: Colors.light.tabIconDefault,
@@ -145,9 +86,21 @@ export default function TabLayout() {
             fontWeight: '900' as const,
             color: '#FFFFFF',
           },
-          // The navy masthead no longer prints a title — it's redundant with
-          // the bottom dock's per-tab labels (tabBarLabel/title below).
-          headerTitle: () => null,
+          headerTitleAlign: 'center',
+          // headerLeft/headerRight aren't equal widths (the right side carries
+          // two buttons), so the default "centered in the space between them"
+          // layout drifts left. An absolute, full-width container centers the
+          // wordmark against the whole bar instead, with the side buttons
+          // painted on top of it.
+          headerTitleContainerStyle: {
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            alignItems: 'center',
+          },
+          // The navy masthead prints the app wordmark instead of a per-tab
+          // title — per-tab labels already live on the bottom dock below.
+          headerTitle: () => <BrandTitle />,
           // Transparent scenes let the flat cream canvas underneath show through.
           sceneStyle: {
             backgroundColor: 'transparent',
@@ -161,7 +114,7 @@ export default function TabLayout() {
           tabBarLabel: "Discover",
           tabBarIcon: ({ color }) => <Compass size={22} color={color} strokeWidth={2.5} />,
           headerLeft: () => <CreateMenuButton />,
-          headerRight: () => <NotificationBell />,
+          headerRight: () => <HeaderRight />,
         }}
       />
       <Tabs.Screen
@@ -206,47 +159,6 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-  tabBar: {
-    // In normal flow (react-navigation's default footer layout) rather than
-    // absolute/fixed: iOS Safari anchors fixed elements to its layout
-    // viewport, which extends behind the bottom toolbar and clips the dock.
-    // A flow footer inside the 100dvh-bounded root can't be mis-anchored.
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.light.card,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderTopWidth: 3,
-    borderColor: INK,
-    zIndex: 50,
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-  },
-  pill: {
-    alignItems: 'center',
-    gap: 2,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
-  },
-  pillActive: {
-    backgroundColor: palette.orange,
-    borderWidth: 2,
-    borderColor: INK,
-  },
-  tabLabel: {
-    fontSize: 11,
-    color: Colors.light.tabIconDefault,
-    fontWeight: '800' as const,
-  },
-  tabLabelActive: {
-    color: '#FFFFFF',
-  },
   badge: {
     position: 'absolute',
     top: -4,
@@ -266,8 +178,29 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900' as const,
   },
-  bellButton: {
+  brandTitle: {
+    fontFamily: 'Bungee_400Regular',
+    fontSize: 18,
+    color: '#FFFFFF',
+    letterSpacing: 0.4,
+  },
+  headerRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     marginRight: 16,
+  },
+  calendarButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: INK,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellButton: {
     position: 'relative',
   },
   bellBadge: {

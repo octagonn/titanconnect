@@ -1,10 +1,10 @@
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Image, TextInput, TouchableOpacity, ScrollView, Platform, Modal, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Image, TextInput, TouchableOpacity, Pressable, ScrollView, Platform, Modal, KeyboardAvoidingView } from 'react-native';
 import { showAlert } from '@/lib/alert';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Heart, MessageCircle, MoreHorizontal } from 'lucide-react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Heart, MessageCircle, MoreHorizontal, Star } from 'lucide-react-native';
 
-import Colors, { INK } from '@/constants/colors';
+import Colors, { INK, palette } from '@/constants/colors';
 import { trpc } from '@/lib/trpc';
 import { useAuth } from '@/contexts/AuthContext';
 import Avatar from '@/components/ui/Avatar';
@@ -147,30 +147,41 @@ export default function PostDetailScreen() {
     ]);
   };
 
+  const headerScreen = <Stack.Screen options={{ title: post?.title || 'Post' }} />;
+
   if (!postId) {
     return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.messageText}>Invalid post link.</Text>
-      </View>
+      <>
+        {headerScreen}
+        <View style={styles.centerContainer}>
+          <Text style={styles.messageText}>Invalid post link.</Text>
+        </View>
+      </>
     );
   }
 
   if (isLoading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={Colors.light.primary} />
-      </View>
+      <>
+        {headerScreen}
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={Colors.light.primary} />
+        </View>
+      </>
     );
   }
 
   if (isError || !post) {
     return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.messageText}>Post not found.</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-          <Text style={styles.retryText}>Retry</Text>
-        </TouchableOpacity>
-      </View>
+      <>
+        {headerScreen}
+        <View style={styles.centerContainer}>
+          <Text style={styles.messageText}>Post not found.</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </>
     );
   }
 
@@ -178,16 +189,24 @@ export default function PostDetailScreen() {
     !!currentUser && post.likedBy && post.likedBy.includes(currentUser.id);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+    <>
+      {headerScreen}
+      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.postCardWrap}>
       <HardShadow offset={8} radius={24} />
       <View style={styles.postCard}>
         <View style={styles.postHeader}>
-          <Avatar uri={post.userAvatar} name={post.userName} size={44} />
-          <View style={styles.postHeaderText}>
-            <Text style={styles.userName}>{post.userName}</Text>
-            <Text style={styles.timeAgo}>{getTimeAgo(post.createdAt)}</Text>
-          </View>
+          <Pressable
+            style={styles.postHeaderIdentity}
+            disabled={post.category === 'anon'}
+            onPress={() => router.push(`/profile/${post.userId}` as any)}
+          >
+            <Avatar uri={post.userAvatar} name={post.userName} size={44} />
+            <View style={styles.postHeaderText}>
+              <Text style={styles.userName}>{post.userName}</Text>
+              <Text style={styles.timeAgo}>{getTimeAgo(post.createdAt)}</Text>
+            </View>
+          </Pressable>
           {currentUser?.id === post.userId && (
             <TouchableOpacity onPress={openPostOptions} style={styles.moreButton}>
               <MoreHorizontal size={20} color={Colors.light.textSecondary} />
@@ -206,17 +225,49 @@ export default function PostDetailScreen() {
         )}
 
         <View style={styles.postActions}>
-          <TouchableOpacity style={styles.actionButton} onPress={handleToggleLike}>
-            <Heart
-              size={20}
-              color={isLiked ? Colors.light.error : Colors.light.textSecondary}
-              fill={isLiked ? Colors.light.error : 'transparent'}
-              strokeWidth={2.5}
-            />
-            <Text style={[styles.actionText, isLiked && styles.actionTextActive]}>
-              {post.likes}
+          <Pressable
+            style={({ pressed }) => [
+              styles.actionButton,
+              post.category === 'events' && isLiked && styles.interestActive,
+              { transform: [{ scale: pressed ? 0.94 : 1 }] },
+            ]}
+            onPress={handleToggleLike}
+            disabled={toggleLikeMutation.isPending}
+          >
+            {toggleLikeMutation.isPending ? (
+              <ActivityIndicator size="small" color={Colors.light.textSecondary} />
+            ) : post.category === 'events' ? (
+              <Star
+                size={18}
+                color={isLiked ? '#FFFFFF' : Colors.light.textSecondary}
+                fill={isLiked ? '#FFFFFF' : 'transparent'}
+                strokeWidth={2.5}
+              />
+            ) : (
+              <Heart
+                size={20}
+                color={isLiked ? Colors.light.error : Colors.light.textSecondary}
+                fill={isLiked ? Colors.light.error : 'transparent'}
+                strokeWidth={2.5}
+              />
+            )}
+            <Text
+              style={[
+                styles.actionText,
+                isLiked && (post.category === 'events' ? styles.interestTextActive : styles.actionTextActive),
+              ]}
+            >
+              {post.category === 'events'
+                ? isLiked
+                  ? 'Interested'
+                  : 'Interested?'
+                : post.category === 'study'
+                ? isLiked
+                  ? 'Joined'
+                  : 'Join'
+                : post.likes}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
 
           <View style={styles.actionButton}>
             <MessageCircle size={20} color={Colors.light.textSecondary} strokeWidth={2.5} />
@@ -236,9 +287,13 @@ export default function PostDetailScreen() {
         ) : (
           post.comments.map((comment) => (
             <View key={comment.id} style={styles.comment}>
-              <Avatar uri={comment.userAvatar} name={comment.userName} size={32} />
+              <Pressable onPress={() => router.push(`/profile/${comment.userId}` as any)}>
+                <Avatar uri={comment.userAvatar} name={comment.userName} size={32} />
+              </Pressable>
               <View style={styles.commentContent}>
-                <Text style={styles.commentUserName}>{comment.userName}</Text>
+                <Pressable onPress={() => router.push(`/profile/${comment.userId}` as any)}>
+                  <Text style={styles.commentUserName}>{comment.userName}</Text>
+                </Pressable>
                 <Text style={styles.commentText}>{comment.content}</Text>
                 {comment.userId === currentUser?.id && (
                   <TouchableOpacity
@@ -441,17 +496,22 @@ export default function PostDetailScreen() {
           onPress={handleAddComment}
           disabled={!commentText.trim() || addCommentMutation.isPending}
         >
-          <Text
-            style={[
-              styles.commentSubmit,
-              (!commentText.trim() || addCommentMutation.isPending) && styles.commentSubmitDisabled,
-            ]}
-          >
-            Post
-          </Text>
+          {addCommentMutation.isPending ? (
+            <ActivityIndicator size="small" color={Colors.light.primary} />
+          ) : (
+            <Text
+              style={[
+                styles.commentSubmit,
+                !commentText.trim() && styles.commentSubmitDisabled,
+              ]}
+            >
+              Post
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </>
   );
 }
 
@@ -519,6 +579,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     marginBottom: 12,
+  },
+  postHeaderIdentity: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -619,6 +685,15 @@ const styles = StyleSheet.create({
   },
   actionTextActive: {
     color: Colors.light.error,
+  },
+  interestActive: {
+    backgroundColor: palette.orange,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  interestTextActive: {
+    color: '#FFFFFF',
   },
   commentsSectionWrap: {
     position: 'relative',

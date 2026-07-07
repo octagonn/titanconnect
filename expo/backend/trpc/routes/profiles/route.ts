@@ -59,6 +59,46 @@ export const profilesRouter = createTRPCRouter({
       };
     }),
 
+  getConnections: protectedProcedure
+    .input(z.object({ userId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const { userId } = input;
+
+      const { data: connections, error } = await ctx.supabase
+        .from("connections")
+        .select("user_id, connected_user_id")
+        .eq("status", "accepted")
+        .or(`user_id.eq.${userId},connected_user_id.eq.${userId}`);
+
+      if (error) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
+      }
+
+      const otherIds = (connections ?? []).map((c) =>
+        c.user_id === userId ? c.connected_user_id : c.user_id
+      );
+
+      if (otherIds.length === 0) {
+        return [];
+      }
+
+      const { data: profiles, error: profilesError } = await ctx.supabase
+        .from("profiles")
+        .select("id, name, avatar_url, major")
+        .in("id", otherIds);
+
+      if (profilesError) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: profilesError.message });
+      }
+
+      return (profiles ?? []).map((p) => ({
+        id: p.id,
+        name: p.name,
+        avatar: p.avatar_url,
+        major: p.major,
+      }));
+    }),
+
   search: protectedProcedure
     .input(
       z.object({

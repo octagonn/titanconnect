@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, ActivityIndicator } from 'react-native';
 import { Calendar, MapPin, Star } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -91,19 +91,27 @@ export default function EventsPreview() {
                 )}
                 <View style={styles.footerRow}>
                   <Text style={styles.interestedText}>{event.likes} interested</Text>
-                  <TouchableOpacity
-                    style={[styles.interestBtn, isInterested && styles.interestBtnActive]}
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.interestBtn,
+                      isInterested && styles.interestBtnActive,
+                      { transform: [{ scale: pressed ? 0.94 : 1 }] },
+                    ]}
                     onPress={(e) => {
                       e.stopPropagation();
                       toggleInterested(event.id);
                     }}
-                    activeOpacity={0.8}
+                    disabled={toggleLikeMutation.isPending && toggleLikeMutation.variables?.postId === event.id}
                   >
-                    <Star size={14} color={isInterested ? '#FFFFFF' : INK} fill={isInterested ? '#FFFFFF' : 'transparent'} strokeWidth={2.5} />
+                    {toggleLikeMutation.isPending && toggleLikeMutation.variables?.postId === event.id ? (
+                      <ActivityIndicator size="small" color={isInterested ? '#FFFFFF' : INK} />
+                    ) : (
+                      <Star size={14} color={isInterested ? '#FFFFFF' : INK} fill={isInterested ? '#FFFFFF' : 'transparent'} strokeWidth={2.5} />
+                    )}
                     <Text style={[styles.interestBtnText, isInterested && styles.interestBtnTextActive]}>
                       {isInterested ? 'Interested' : 'Interested?'}
                     </Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 </View>
               </View>
             </View>

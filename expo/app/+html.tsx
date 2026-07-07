@@ -22,9 +22,13 @@ export default function Root({ children }: PropsWithChildren) {
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+        {/* maximum-scale=1 stops iOS/Android from auto-zooming the page when a
+            text input is focused (their default behavior for any input whose
+            rendered font-size is under 16px) — without it, every tap into the
+            create-post modal or a chat box zoomed the whole page in. */}
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
+          content="width=device-width, initial-scale=1, maximum-scale=1, shrink-to-fit=no, viewport-fit=cover"
         />
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#00274C" />

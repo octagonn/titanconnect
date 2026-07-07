@@ -1,5 +1,5 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo } from 'react';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { showAlert } from '@/lib/alert';
 import Colors, { INK, palette } from '@/constants/colors';
@@ -9,6 +9,7 @@ import { trpc } from '@/lib/trpc';
 import Avatar from '@/components/ui/Avatar';
 import Chip from '@/components/ui/Chip';
 import HardShadow from '@/components/ui/HardShadow';
+import ListRow from '@/components/ui/ListRow';
 
 export default function OtherProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -24,6 +25,16 @@ export default function OtherProfileScreen() {
 
   const profileQuery = trpc.profiles.getById.useQuery(
     { userId: id! },
+    { enabled: !!id && !!currentUser }
+  );
+
+  const connectionsQuery = trpc.profiles.getConnections.useQuery(
+    { userId: id! },
+    { enabled: !!id && !!currentUser }
+  );
+
+  const postsQuery = trpc.posts.getInfinite.useQuery(
+    { limit: 10, userId: id! },
     { enabled: !!id && !!currentUser }
   );
 
@@ -74,20 +85,38 @@ export default function OtherProfileScreen() {
     upsertConversation.mutate({ otherUserId: id });
   };
 
-  const actionButton = useMemo(() => {
+  function renderActionButton() {
     switch (relationship) {
       case 'accepted':
         return (
           <View style={styles.actionRow}>
-            <Chip label="Message" variant="solid" color={palette.blue} onPress={handleMessage} />
-            <Chip label="Remove" variant="outline" onPress={handleRemove} />
+            <Chip
+              label="Message"
+              variant="solid"
+              color={palette.blue}
+              onPress={handleMessage}
+              loading={upsertConversation.isPending}
+            />
+            <Chip label="Remove" variant="outline" onPress={handleRemove} loading={remove.isPending} />
           </View>
         );
       case 'incoming':
         return (
           <View style={styles.actionRow}>
-            <Chip label="Accept" variant="solid" color={palette.blue} onPress={() => handleRespond('accept')} />
-            <Chip label="Decline" variant="solid" color={palette.rust} onPress={() => handleRespond('decline')} />
+            <Chip
+              label="Accept"
+              variant="solid"
+              color={palette.blue}
+              onPress={() => handleRespond('accept')}
+              loading={respond.isPending}
+            />
+            <Chip
+              label="Decline"
+              variant="solid"
+              color={palette.rust}
+              onPress={() => handleRespond('decline')}
+              loading={respond.isPending}
+            />
           </View>
         );
       case 'pending':
@@ -105,62 +134,116 @@ export default function OtherProfileScreen() {
       default:
         return (
           <View style={styles.actionRow}>
-            <Chip label="Add Friend" variant="solid" color={palette.orange} onPress={handleAddFriend} />
-            <Chip label="Message" variant="outline" onPress={handleMessage} />
+            <Chip
+              label="Add Friend"
+              variant="solid"
+              color={palette.orange}
+              onPress={handleAddFriend}
+              loading={sendRequest.isPending}
+            />
+            <Chip label="Message" variant="outline" onPress={handleMessage} loading={upsertConversation.isPending} />
           </View>
         );
     }
-  }, [relationship]);
+  }
 
   if (profileQuery.isLoading || !profileQuery.data) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={Colors.light.primary} />
-        <Text style={styles.loadingText}>Loading profile...</Text>
-      </View>
+      <>
+        <Stack.Screen options={{ title: 'Profile' }} />
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={Colors.light.primary} />
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
+      </>
     );
   }
 
   const profile = profileQuery.data;
+  const connections = connectionsQuery.data ?? [];
+  const posts = postsQuery.data?.items ?? [];
 
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Avatar uri={profile.avatar} name={profile.name} size={120} />
-          <Text style={styles.name}>{profile.name}</Text>
-          <Text style={styles.major}>{profile.major}</Text>
-        </View>
+    <>
+      <Stack.Screen options={{ title: profile.name || 'Profile' }} />
+      <View style={styles.container}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.header}>
+            <Avatar uri={profile.avatar} name={profile.name} size={120} />
+            <Text style={styles.name}>{profile.name}</Text>
+            <Text style={styles.major}>{profile.major}</Text>
+          </View>
 
-        {actionButton}
+          {renderActionButton()}
 
-        {profile.bio ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>About</Text>
-            <View style={styles.cardWrap}>
-              <HardShadow offset={6} radius={20} />
-              <View style={styles.card}>
-                <Text style={styles.bodyText}>{profile.bio}</Text>
+          {profile.bio ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>About</Text>
+              <View style={styles.cardWrap}>
+                <HardShadow offset={6} radius={20} />
+                <View style={styles.card}>
+                  <Text style={styles.bodyText}>{profile.bio}</Text>
+                </View>
               </View>
             </View>
-          </View>
-        ) : null}
+          ) : null}
 
-        {profile.interests?.length ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Interests</Text>
-            <View style={styles.cardWrap}>
-              <HardShadow offset={6} radius={20} />
-              <View style={[styles.card, styles.chipContainer]}>
-                {profile.interests.map((interest: string) => (
-                  <Chip key={interest} label={interest} variant="outline" />
-                ))}
+          {profile.interests?.length ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Interests</Text>
+              <View style={styles.cardWrap}>
+                <HardShadow offset={6} radius={20} />
+                <View style={[styles.card, styles.chipContainer]}>
+                  {profile.interests.map((interest: string) => (
+                    <Chip key={interest} label={interest} variant="outline" />
+                  ))}
+                </View>
               </View>
             </View>
-          </View>
-        ) : null}
-      </ScrollView>
-    </View>
+          ) : null}
+
+          {connections.length > 0 ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Connected with</Text>
+              <View style={styles.cardWrap}>
+                <HardShadow offset={6} radius={20} />
+                <View style={[styles.card, styles.rowList]}>
+                  {connections.map((c) => (
+                    <ListRow
+                      key={c.id}
+                      avatarUri={c.avatar}
+                      avatarName={c.name}
+                      title={c.name}
+                      subtitle={c.major ?? undefined}
+                      onPress={() => router.push(`/profile/${c.id}` as any)}
+                    />
+                  ))}
+                </View>
+              </View>
+            </View>
+          ) : null}
+
+          {posts.length > 0 ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Posts</Text>
+              <View style={styles.cardWrap}>
+                <HardShadow offset={6} radius={20} />
+                <View style={[styles.card, styles.rowList]}>
+                  {posts.map((post) => (
+                    <ListRow
+                      key={post.id}
+                      title={post.title || post.content}
+                      subtitle={`${post.likes} likes · ${post.comments.length} comments`}
+                      onPress={() => router.push(`/post/${post.id}` as any)}
+                    />
+                  ))}
+                </View>
+              </View>
+            </View>
+          ) : null}
+        </ScrollView>
+      </View>
+    </>
   );
 }
 
@@ -245,5 +328,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  rowList: {
+    gap: 10,
   },
 });

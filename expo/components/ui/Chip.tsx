@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { INK, palette } from '@/constants/colors';
 
 type ChipVariant = 'solid' | 'outline' | 'sticker';
@@ -13,6 +13,7 @@ interface ChipProps {
   rotate?: number;
   size?: 'sm' | 'md';
   onPress?: () => void;
+  loading?: boolean;
   style?: ViewStyle;
 }
 
@@ -33,33 +34,52 @@ export default function Chip({
   rotate = 0,
   size = 'md',
   onPress,
+  loading = false,
   style,
 }: ChipProps) {
   const isSm = size === 'sm';
   const isFilled = variant !== 'outline';
   const backgroundColor = isFilled ? color : '#FFFFFF';
   const textColor = isFilled ? textColorFor(color) : INK;
-  const Wrapper = onPress ? TouchableOpacity : View;
+
+  const content = (
+    <>
+      {loading ? (
+        <ActivityIndicator size="small" color={textColor} />
+      ) : (
+        <>
+          {Icon ? <Icon size={isSm ? 11 : 13} color={textColor} strokeWidth={2.5} /> : null}
+          <Text style={[styles.label, { color: textColor, fontSize: isSm ? 10 : 12 }]}>{label}</Text>
+        </>
+      )}
+    </>
+  );
+
+  const baseStyle = {
+    backgroundColor,
+    borderWidth: isSm ? 1.5 : 2,
+    paddingHorizontal: isSm ? 8 : 10,
+    paddingVertical: isSm ? 3 : 5,
+    transform: rotate ? [{ rotate: `${rotate}deg` }] : undefined,
+  };
+
+  if (!onPress) {
+    return <View style={[styles.chip, baseStyle, style]}>{content}</View>;
+  }
 
   return (
-    <Wrapper
+    <Pressable
       onPress={onPress}
-      activeOpacity={onPress ? 0.8 : undefined}
-      style={[
+      disabled={loading}
+      style={({ pressed }) => [
         styles.chip,
-        {
-          backgroundColor,
-          borderWidth: isSm ? 1.5 : 2,
-          paddingHorizontal: isSm ? 8 : 10,
-          paddingVertical: isSm ? 3 : 5,
-          transform: rotate ? [{ rotate: `${rotate}deg` }] : undefined,
-        },
+        baseStyle,
         style,
+        { opacity: pressed || loading ? 0.7 : 1, transform: [...(baseStyle.transform ?? []), { scale: pressed ? 0.94 : 1 }] },
       ]}
     >
-      {Icon ? <Icon size={isSm ? 11 : 13} color={textColor} strokeWidth={2.5} /> : null}
-      <Text style={[styles.label, { color: textColor, fontSize: isSm ? 10 : 12 }]}>{label}</Text>
-    </Wrapper>
+      {content}
+    </Pressable>
   );
 }
 

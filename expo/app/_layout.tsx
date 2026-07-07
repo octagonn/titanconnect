@@ -2,6 +2,7 @@ import "react-native-gesture-handler";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import { useFonts, Bungee_400Regular } from "@expo-google-fonts/bungee";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -17,6 +18,7 @@ import { supabase } from "@/lib/supabase";
 import { showAlert } from '@/lib/alert';
 import AddToHomeScreen from '@/components/AddToHomeScreen';
 import NeoHeaderBackground from '@/components/ui/NeoHeaderBackground';
+import GlobalTabBar from '@/components/ui/GlobalTabBar';
 
 // react-native-screens is disabled by default on web, which makes
 // bottom-tabs render inactive tab scenes as plain stacked Views with no
@@ -157,17 +159,23 @@ function RootLayoutNav() {
     };
   }, [router]);
 
+  // Only the auth/onboarding flow needs gating by name for the *authenticated*
+  // forward-redirect — every other route (tabs, post/chat/profile detail,
+  // notifications, my-activity, ...) is just app content. Enumerating every
+  // content route here as an "allowed" segment used to be a maintenance
+  // trap: it silently bounced any new or forgotten route (e.g. post/[id])
+  // back to Discover as soon as it loaded.
+  const rootSegment = segments[0];
+  const inTabsGroup = rootSegment === '(tabs)';
+  const authFlowSegments = ['welcome', 'auth', 'verify-email'];
+  const inAuthFlow = authFlowSegments.includes(rootSegment ?? '');
+  const inStudentOnboarding = rootSegment === 'setup-profile';
+  const inFacultyOnboarding = rootSegment === 'setup-faculty';
+  const inOnboarding = inStudentOnboarding || inFacultyOnboarding;
+  const needsOnboarding = !!currentUser && !currentUser.isProfileComplete;
+
   useEffect(() => {
     if (isLoading) return;
-
-    const rootSegment = segments[0];
-    const inTabsGroup = rootSegment === '(tabs)';
-    const inChat = rootSegment === 'chat';
-    const inProfile = rootSegment === 'profile';
-    const inNotifications = rootSegment === 'notifications';
-    const inStudentOnboarding = rootSegment === 'setup-profile';
-    const inFacultyOnboarding = rootSegment === 'setup-faculty';
-    const inOnboarding = inStudentOnboarding || inFacultyOnboarding;
 
     if (!isAuthenticated) {
       if (inTabsGroup || inOnboarding) {
@@ -176,28 +184,30 @@ function RootLayoutNav() {
       return;
     }
 
-    const needsOnboarding = currentUser && !currentUser.isProfileComplete;
-
     if (needsOnboarding) {
       const target =
         currentUser?.role === 'faculty' ? '/setup-faculty' : '/setup-profile';
 
-      if (!inOnboarding || (currentUser.role === 'faculty' && !inFacultyOnboarding)) {
+      if (!inOnboarding || (currentUser?.role === 'faculty' && !inFacultyOnboarding)) {
         router.replace(target);
       }
       return;
     }
 
-    if (isAuthenticated && !inTabsGroup && !inChat && !inProfile && !inNotifications) {
+    if (inAuthFlow || inOnboarding) {
       router.replace('/(tabs)/home');
     }
-  }, [isLoading, isAuthenticated, currentUser, segments, router]);
+  }, [isLoading, isAuthenticated, needsOnboarding, currentUser, inTabsGroup, inAuthFlow, inOnboarding, inFacultyOnboarding, router]);
 
   if (isLoading) {
     return null;
   }
 
+  const showTabBar = isAuthenticated && !inAuthFlow && !inOnboarding;
+
   return (
+    <View style={styles.rootColumn}>
+    <View style={styles.stackWrap}>
     <Stack
       screenOptions={{
         headerBackTitle: "Back",
@@ -241,14 +251,32 @@ function RootLayoutNav() {
           title: 'Notifications',
         }}
       />
+      <Stack.Screen
+        name="my-activity"
+        options={{
+          headerShown: true,
+          title: 'My Activity',
+        }}
+      />
     </Stack>
+    </View>
+    {showTabBar && <GlobalTabBar />}
+    </View>
   );
 }
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({ Bungee_400Regular });
+
   useEffect(() => {
-    SplashScreen.hideAsync();
-  }, []);
+    if (fontsLoaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded) {
+    return null;
+  }
 
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
@@ -276,5 +304,11 @@ const styles = StyleSheet.create({
   appBackground: {
     flex: 1,
     backgroundColor: Colors.light.background,
+  },
+  rootColumn: {
+    flex: 1,
+  },
+  stackWrap: {
+    flex: 1,
   },
 });

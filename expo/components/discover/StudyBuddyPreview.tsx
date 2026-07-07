@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, ActivityIndicator } from 'react-native';
 import { BookOpen, Clock, MapPin } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -98,22 +98,36 @@ export default function StudyBuddyPreview() {
               )}
 
               <View style={styles.footerRow}>
-                <View style={styles.hostRow}>
+                <Pressable
+                  style={styles.hostRow}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    router.push(`/profile/${group.userId}` as any);
+                  }}
+                >
                   <Avatar name={group.userName} uri={group.userAvatar} size={28} />
                   <Text style={styles.hostText}>{group.userName} · {group.likes} joined</Text>
-                </View>
-                <TouchableOpacity
-                  style={[styles.joinBtn, isJoined && styles.joinBtnActive]}
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.joinBtn,
+                    isJoined && styles.joinBtnActive,
+                    { transform: [{ scale: pressed ? 0.94 : 1 }] },
+                  ]}
                   onPress={(e) => {
                     e.stopPropagation();
                     toggleJoin(group.id);
                   }}
-                  activeOpacity={0.8}
+                  disabled={toggleLikeMutation.isPending && toggleLikeMutation.variables?.postId === group.id}
                 >
-                  <Text style={[styles.joinBtnText, isJoined && styles.joinBtnTextActive]}>
-                    {isJoined ? 'Joined' : 'Join'}
-                  </Text>
-                </TouchableOpacity>
+                  {toggleLikeMutation.isPending && toggleLikeMutation.variables?.postId === group.id ? (
+                    <ActivityIndicator size="small" color={isJoined ? INK : '#FFFFFF'} />
+                  ) : (
+                    <Text style={[styles.joinBtnText, isJoined && styles.joinBtnTextActive]}>
+                      {isJoined ? 'Joined' : 'Join'}
+                    </Text>
+                  )}
+                </Pressable>
               </View>
             </View>
           </TouchableOpacity>

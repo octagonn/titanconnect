@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, ActivityIndicator, Image, Animated } from 'react-native';
 import { Ghost, Heart, MessageCircle, Check } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -83,22 +84,26 @@ export default function AnonymousPreview() {
               )}
 
               <View style={styles.actionsRow}>
-                <TouchableOpacity
-                  style={styles.actionBtn}
+                <Pressable
+                  style={({ pressed }) => [styles.actionBtn, { transform: [{ scale: pressed ? 0.9 : 1 }] }]}
                   onPress={(e) => {
                     e.stopPropagation();
                     toggleLike(post.id);
                   }}
-                  activeOpacity={0.8}
+                  disabled={toggleLikeMutation.isPending && toggleLikeMutation.variables?.postId === post.id}
                 >
-                  <Heart
-                    size={18}
-                    color={isLiked ? palette.rust : Colors.light.textSecondary}
-                    fill={isLiked ? palette.rust : 'transparent'}
-                    strokeWidth={2.5}
-                  />
+                  {toggleLikeMutation.isPending && toggleLikeMutation.variables?.postId === post.id ? (
+                    <ActivityIndicator size="small" color={Colors.light.textSecondary} />
+                  ) : (
+                    <Heart
+                      size={18}
+                      color={isLiked ? palette.rust : Colors.light.textSecondary}
+                      fill={isLiked ? palette.rust : 'transparent'}
+                      strokeWidth={2.5}
+                    />
+                  )}
                   <Text style={styles.actionText}>{post.likes}</Text>
-                </TouchableOpacity>
+                </Pressable>
                 <View style={styles.actionBtn}>
                   <MessageCircle size={18} color={Colors.light.textSecondary} strokeWidth={2.5} />
                   <Text style={styles.actionText}>{post.comments.length}</Text>
@@ -118,6 +123,31 @@ function PollBody({ post, onVote }: { post: Post; onVote: (optionIndex: number) 
   const total = votes.reduce((sum, v) => sum + v, 0);
   const myVote = post.myVoteIndex;
 
+  // One Animated.Value per option, holding its fill percentage — recreated
+  // only if the option count itself changes (never, in practice, since
+  // options are immutable once a poll is created).
+  const animsRef = useRef<Animated.Value[]>([]);
+  if (animsRef.current.length !== options.length) {
+    animsRef.current = options.map((_, i) => {
+      const pct = total > 0 ? Math.round(((votes[i] ?? 0) / total) * 100) : 0;
+      return new Animated.Value(pct);
+    });
+  }
+
+  useEffect(() => {
+    options.forEach((_, i) => {
+      const count = votes[i] ?? 0;
+      const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+      Animated.timing(animsRef.current[i], {
+        toValue: pct,
+        duration: 350,
+        useNativeDriver: false,
+      }).start();
+    });
+    // Re-run whenever the vote tallies change, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(votes)]);
+
   return (
     <View style={styles.pollBody}>
       {!!post.content && <Text style={styles.pollQuestion}>{post.content}</Text>}
@@ -125,23 +155,26 @@ function PollBody({ post, onVote }: { post: Post; onVote: (optionIndex: number) 
         const count = votes[i] ?? 0;
         const pct = total > 0 ? Math.round((count / total) * 100) : 0;
         const isMine = myVote === i;
+        const width = animsRef.current[i]?.interpolate({
+          inputRange: [0, 100],
+          outputRange: ['0%', '100%'],
+        });
         return (
-          <TouchableOpacity
+          <Pressable
             key={option.id}
-            style={styles.pollOption}
+            style={({ pressed }) => [styles.pollOption, { transform: [{ scale: pressed ? 0.97 : 1 }] }]}
             onPress={(e) => {
               e.stopPropagation();
               onVote(i);
             }}
-            activeOpacity={0.8}
           >
-            <View style={[styles.pollFill, { width: `${pct}%` }, isMine && styles.pollFillMine]} />
+            <Animated.View style={[styles.pollFill, { width }, isMine && styles.pollFillMine]} />
             <View style={styles.pollOptionContent}>
               {isMine && <Check size={13} color="#FFFFFF" strokeWidth={3} />}
               <Text style={styles.pollOptionLabel}>{option.label}</Text>
               <Text style={styles.pollOptionPct}>{pct}%</Text>
             </View>
-          </TouchableOpacity>
+          </Pressable>
         );
       })}
       {total > 0 && (
@@ -160,51 +193,73 @@ function WishboneBody({ post, onVote }: { post: Post; onVote: (optionIndex: numb
   const rightPct = total > 0 ? 100 - leftPct : 0;
   const myVote = post.myVoteIndex;
 
+  const leftScale = useRef(new Animated.Value(1)).current;
+  const rightScale = useRef(new Animated.Value(1)).current;
+  const badgeOpacity = useRef(new Animated.Value(total > 0 ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(badgeOpacity, {
+      toValue: total > 0 ? 1 : 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+  }, [total, badgeOpacity]);
+
+  const pulse = (anim: Animated.Value) => {
+    Animated.sequence([
+      Animated.timing(anim, { toValue: 1.08, duration: 120, useNativeDriver: true }),
+      Animated.spring(anim, { toValue: 1, friction: 4, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const vote = (index: 0 | 1) => {
+    pulse(index === 0 ? leftScale : rightScale);
+    onVote(index);
+  };
+
   return (
     <View>
       {!!post.content && <Text style={styles.content}>{post.content}</Text>}
       <View style={styles.wishboneRow}>
-        <TouchableOpacity
-          style={styles.wishboneSide}
+        <Pressable
+          style={styles.wishbonePressable}
           onPress={(e) => {
             e.stopPropagation();
-            onVote(0);
+            vote(0);
           }}
-          activeOpacity={0.85}
         >
-          {post.imageUrl && <Image source={{ uri: post.imageUrl }} style={styles.wishboneImage} />}
-          {myVote === 0 && (
-            <View style={styles.wishboneCheck}>
-              <Check size={16} color="#FFFFFF" strokeWidth={3} />
-            </View>
-          )}
-          {total > 0 && (
-            <View style={styles.wishbonePctBadge}>
+          <Animated.View style={[styles.wishboneSide, { transform: [{ scale: leftScale }] }]}>
+            {post.imageUrl && <Image source={{ uri: post.imageUrl }} style={styles.wishboneImage} />}
+            {myVote === 0 && (
+              <View style={styles.wishboneCheck}>
+                <Check size={16} color="#FFFFFF" strokeWidth={3} />
+              </View>
+            )}
+            <Animated.View style={[styles.wishbonePctBadge, { opacity: badgeOpacity }]}>
               <Text style={styles.wishbonePctText}>{leftPct}%</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+            </Animated.View>
+          </Animated.View>
+        </Pressable>
         <View style={styles.wishboneDivider} />
-        <TouchableOpacity
-          style={styles.wishboneSide}
+        <Pressable
+          style={styles.wishbonePressable}
           onPress={(e) => {
             e.stopPropagation();
-            onVote(1);
+            vote(1);
           }}
-          activeOpacity={0.85}
         >
-          {post.imageUrl2 && <Image source={{ uri: post.imageUrl2 }} style={styles.wishboneImage} />}
-          {myVote === 1 && (
-            <View style={styles.wishboneCheck}>
-              <Check size={16} color="#FFFFFF" strokeWidth={3} />
-            </View>
-          )}
-          {total > 0 && (
-            <View style={styles.wishbonePctBadge}>
+          <Animated.View style={[styles.wishboneSide, { transform: [{ scale: rightScale }] }]}>
+            {post.imageUrl2 && <Image source={{ uri: post.imageUrl2 }} style={styles.wishboneImage} />}
+            {myVote === 1 && (
+              <View style={styles.wishboneCheck}>
+                <Check size={16} color="#FFFFFF" strokeWidth={3} />
+              </View>
+            )}
+            <Animated.View style={[styles.wishbonePctBadge, { opacity: badgeOpacity }]}>
               <Text style={styles.wishbonePctText}>{rightPct}%</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+            </Animated.View>
+          </Animated.View>
+        </Pressable>
       </View>
     </View>
   );
@@ -337,6 +392,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     height: 170,
+  },
+  wishbonePressable: {
+    flex: 1,
   },
   wishboneSide: {
     flex: 1,

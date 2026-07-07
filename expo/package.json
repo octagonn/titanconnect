@@ -19,10 +19,10 @@
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "test": "jest"
-
   },
   "dependencies": {
     "@ai-sdk/react": "^2.0.81",
+    "@expo-google-fonts/bungee": "^0.4.1",
     "@expo/vector-icons": "^15.0.3",
     "@hono/trpc-server": "^0.4.0",
     "@nkzw/create-context-hook": "^1.1.0",

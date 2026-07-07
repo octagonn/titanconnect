@@ -1,6 +1,7 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { ShoppingBag, Tag } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, ActivityIndicator } from 'react-native';
+import { ShoppingBag, Tag, Bookmark } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import HardShadow from '@/components/ui/HardShadow';
 import Chip from '@/components/ui/Chip';
 import Colors, { INK, palette } from '@/constants/colors';
@@ -10,6 +11,7 @@ import { trpc } from '@/lib/trpc';
 export default function MarketplacePreview() {
   const router = useRouter();
   const { currentUser } = useAuth();
+  const utils = trpc.useUtils();
 
   const { data, isLoading } = trpc.posts.getInfinite.useInfiniteQuery(
     { limit: 20, category: 'market' },
@@ -21,6 +23,15 @@ export default function MarketplacePreview() {
       router.push(`/chat/${conv.id}` as any);
     },
   });
+
+  const toggleSaveMutation = trpc.posts.toggleLike.useMutation({
+    onSuccess: () => utils.posts.getInfinite.invalidate(),
+  });
+
+  const toggleSave = (postId: string) => {
+    toggleSaveMutation.mutate({ postId });
+    Haptics.selectionAsync();
+  };
 
   const listings = data?.pages.flatMap((page) => page.items) ?? [];
 
@@ -44,6 +55,7 @@ export default function MarketplacePreview() {
     <View style={styles.grid}>
       {listings.map((item) => {
         const isOwnListing = currentUser?.id === item.userId;
+        const isSaved = currentUser ? item.likedBy.includes(currentUser.id) : false;
         return (
           <TouchableOpacity
             key={item.id}
@@ -55,6 +67,28 @@ export default function MarketplacePreview() {
             <View style={styles.card}>
               <View style={[styles.imageBlock, { backgroundColor: palette.skyBlue }]}>
                 <ShoppingBag size={28} color={INK} strokeWidth={2} />
+                {!isOwnListing && (
+                  <Pressable
+                    style={({ pressed }) => [styles.saveBtn, { transform: [{ scale: pressed ? 0.88 : 1 }] }]}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      toggleSave(item.id);
+                    }}
+                    disabled={toggleSaveMutation.isPending && toggleSaveMutation.variables?.postId === item.id}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    {toggleSaveMutation.isPending && toggleSaveMutation.variables?.postId === item.id ? (
+                      <ActivityIndicator size="small" color={INK} />
+                    ) : (
+                      <Bookmark
+                        size={14}
+                        color={INK}
+                        fill={isSaved ? INK : 'transparent'}
+                        strokeWidth={2.5}
+                      />
+                    )}
+                  </Pressable>
+                )}
                 {item.price != null && (
                   <View style={styles.priceTag}>
                     <Tag size={11} color={INK} strokeWidth={2.5} />
@@ -73,19 +107,26 @@ export default function MarketplacePreview() {
                   </View>
                 )}
                 <Text style={styles.seller}>{item.userName}</Text>
-                <TouchableOpacity
-                  style={[styles.messageBtn, isOwnListing && styles.messageBtnDisabled]}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.messageBtn,
+                    isOwnListing && styles.messageBtnDisabled,
+                    { transform: [{ scale: pressed ? 0.96 : 1 }] },
+                  ]}
                   onPress={(e) => {
                     e.stopPropagation();
                     if (!isOwnListing) upsertConversation.mutate({ otherUserId: item.userId });
                   }}
-                  activeOpacity={0.8}
-                  disabled={isOwnListing || upsertConversation.isPending}
+                  disabled={isOwnListing || (upsertConversation.isPending && upsertConversation.variables?.otherUserId === item.userId)}
                 >
-                  <Text style={[styles.messageBtnText, isOwnListing && styles.messageBtnTextDisabled]}>
-                    {isOwnListing ? 'Your Listing' : 'Message Seller'}
-                  </Text>
-                </TouchableOpacity>
+                  {upsertConversation.isPending && upsertConversation.variables?.otherUserId === item.userId ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={[styles.messageBtnText, isOwnListing && styles.messageBtnTextDisabled]}>
+                      {isOwnListing ? 'Your Listing' : 'Message Seller'}
+                    </Text>
+                  )}
+                </Pressable>
               </View>
             </View>
           </TouchableOpacity>
@@ -128,6 +169,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderBottomWidth: 3,
     borderBottomColor: INK,
+  },
+  saveBtn: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: INK,
+    borderRadius: 8,
+    padding: 4,
   },
   priceTag: {
     position: 'absolute',

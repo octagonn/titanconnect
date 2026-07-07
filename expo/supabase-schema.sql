@@ -249,9 +249,9 @@ create policy "Users can delete their own RSVPs"
   using (auth.uid() = user_id);
 
 -- Connections RLS Policies
-create policy "Connections are viewable by involved users"
+create policy "Connections are viewable by authenticated users"
   on public.connections for select
-  using (auth.uid() = user_id or auth.uid() = connected_user_id);
+  using (auth.role() = 'authenticated');
 
 create policy "Users can create connections"
   on public.connections for insert
