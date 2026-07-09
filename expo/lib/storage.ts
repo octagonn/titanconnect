@@ -17,20 +17,50 @@ function getFileExtension(uri: string): string {
   return dotIndex >= 0 ? lastSegment.slice(dotIndex + 1).toLowerCase() : 'jpg';
 }
 
+const MIME_TYPES: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  mp4: 'video/mp4',
+  mov: 'video/quicktime',
+  m4v: 'video/x-m4v',
+  webm: 'video/webm',
+};
+
+function getContentType(ext: string): string {
+  return MIME_TYPES[ext] ?? `image/${ext}`;
+}
+
+// Maps a blob's real MIME subtype back to a file extension — web picks come
+// back as `blob:`/`data:` URIs with no extension in the path, so the
+// filename-based guess above defaults to "jpg" even for videos. The blob's
+// own `.type` (set by the browser from the source file) is the only
+// reliable signal there, and matters for the upload's Content-Type header
+// (wrong header breaks <video> playback/range requests).
+const EXT_FROM_MIME_SUBTYPE: Record<string, string> = {
+  jpeg: 'jpg',
+  quicktime: 'mov',
+  'x-m4v': 'm4v',
+};
+
 export async function uploadImage(bucket: string, uri: string): Promise<string | null> {
   try {
-    const ext = getFileExtension(uri);
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
-    
+    let ext = getFileExtension(uri);
+    let contentType = getContentType(ext);
     let blobOrBuffer: Blob | ArrayBuffer;
-    let options: any = {
-      contentType: `image/${ext}`,
-      upsert: false,
-    };
 
     if (Platform.OS === 'web') {
       const response = await fetch(uri);
-      blobOrBuffer = await response.blob();
+      const blob = await response.blob();
+      blobOrBuffer = blob;
+      if (blob.type) {
+        contentType = blob.type;
+        const subtype = blob.type.split('/')[1];
+        if (subtype) ext = EXT_FROM_MIME_SUBTYPE[subtype] ?? subtype;
+      }
     } else {
       // Read file as base64 (string literal avoids missing enum on some runtimes)
       const base64 = await FileSystem.readAsStringAsync(uri, {
@@ -39,6 +69,9 @@ export async function uploadImage(bucket: string, uri: string): Promise<string |
       // Convert to ArrayBuffer for Supabase storage
       blobOrBuffer = decode(base64);
     }
+
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
+    const options: any = { contentType, upsert: false };
 
     const { data, error } = await supabase.storage
       .from(bucket)

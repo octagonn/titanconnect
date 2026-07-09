@@ -34,6 +34,14 @@ export interface Post {
   wishboneVotes?: [number, number];
   myVoteIndex?: number;
   tags?: string[];
+  dealtWithUserId?: string;
+  dealtWithUserName?: string;
+  joinPolicy?: 'open' | 'approval';
+  joinRequestStatus?: 'pending' | 'approved' | 'declined';
+  mediaType?: 'image' | 'video';
+  taggedUsers?: { id: string; name: string; avatar?: string }[];
+  taggedEventId?: string;
+  taggedEventTitle?: string;
   likes: number;
   likedBy: string[];
   comments: Comment[];

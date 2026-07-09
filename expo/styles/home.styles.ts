@@ -17,6 +17,12 @@ const homeStyles = StyleSheet.create({
         fontWeight: '700' as const,
         color: Colors.light.textSecondary,
     },
+    emptySubtext: {
+        fontSize: 14,
+        fontWeight: '600' as const,
+        color: Colors.light.textSecondary,
+        paddingVertical: 8,
+    },
     categoryBar: {
         flexGrow: 0,
         flexShrink: 0,
@@ -60,6 +66,18 @@ const homeStyles = StyleSheet.create({
         paddingBottom: 100,
         gap: 16,
     },
+    pullToRefreshRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingBottom: 12,
+    },
+    pullToRefreshText: {
+        fontSize: 13,
+        fontWeight: '800' as const,
+        color: Colors.light.textSecondary,
+    },
     postCardWrap: {
         position: 'relative',
     },
@@ -91,6 +109,22 @@ const homeStyles = StyleSheet.create({
         fontWeight: '600' as const,
         color: Colors.light.textSecondary,
         marginTop: 2,
+    },
+    taggedRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        marginTop: -4,
+        marginBottom: 8,
+    },
+    taggedText: {
+        fontSize: 13,
+        fontWeight: '600' as const,
+        color: Colors.light.textSecondary,
+    },
+    taggedName: {
+        fontSize: 13,
+        fontWeight: '900' as const,
+        color: palette.blue,
     },
     postContent: {
         fontSize: 15,
@@ -270,6 +304,13 @@ const homeStyles = StyleSheet.create({
         borderColor: INK,
         padding: 24,
         minHeight: 300,
+        maxHeight: '85%',
+    },
+    modalScroll: {
+        flexGrow: 0,
+    },
+    modalScrollContent: {
+        paddingBottom: 4,
     },
     modalHeader: {
         flexDirection: 'row',
@@ -395,6 +436,10 @@ const homeStyles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
+        marginTop: 16,
+        paddingTop: 12,
+        borderTopWidth: 2,
+        borderTopColor: INK,
     },
     imageButton: {
         padding: 10,
@@ -592,6 +637,23 @@ const homeStyles = StyleSheet.create({
         color: Colors.light.textSecondary,
         fontWeight: '700' as const,
         textAlign: 'center',
+    },
+    tagPersonRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingVertical: 10,
+    },
+    tagPersonName: {
+        flex: 1,
+        fontSize: 15,
+        fontWeight: '700' as const,
+        color: Colors.light.text,
+    },
+    tagPersonCheck: {
+        fontSize: 16,
+        fontWeight: '900' as const,
+        color: palette.blue,
     },
     editModalContent: {
         backgroundColor: Colors.light.card,

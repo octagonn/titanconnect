@@ -1,14 +1,16 @@
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Image, TextInput, TouchableOpacity, Pressable, ScrollView, Platform, Modal, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TextInput, TouchableOpacity, Pressable, ScrollView, Platform, Modal, KeyboardAvoidingView } from 'react-native';
 import { showAlert } from '@/lib/alert';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Heart, MessageCircle, MoreHorizontal, Star } from 'lucide-react-native';
+import { Heart, MessageCircle, MoreHorizontal, Star, Tag } from 'lucide-react-native';
 
 import Colors, { INK, palette } from '@/constants/colors';
 import { trpc } from '@/lib/trpc';
 import { useAuth } from '@/contexts/AuthContext';
 import Avatar from '@/components/ui/Avatar';
 import HardShadow from '@/components/ui/HardShadow';
+import Chip from '@/components/ui/Chip';
+import PostMedia from '@/components/ui/PostMedia';
 
 export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
@@ -22,6 +24,8 @@ export default function PostDetailScreen() {
   const [commentOptions, setCommentOptions] = useState<{ id: string; content: string } | null>(null);
   const [showEditCommentModal, setShowEditCommentModal] = useState(false);
   const [editCommentContent, setEditCommentContent] = useState('');
+  const [dealtWithPickerVisible, setDealtWithPickerVisible] = useState(false);
+  const [joinRequestsPickerVisible, setJoinRequestsPickerVisible] = useState(false);
 
   const utils = trpc.useUtils();
 
@@ -36,6 +40,54 @@ export default function PostDetailScreen() {
       enabled: !!postId,
     },
   );
+
+  const { data: inquirers } = trpc.posts.getInquirers.useQuery(
+    { postId: postId || '' },
+    { enabled: !!postId && post?.category === 'market' && currentUser?.id === post?.userId },
+  );
+
+  const markDealtWithMutation = trpc.posts.markDealtWith.useMutation({
+    onSuccess: () => {
+      utils.posts.getById.invalidate({ id: postId || '' });
+      utils.posts.getInfinite.invalidate();
+      setDealtWithPickerVisible(false);
+    },
+  });
+
+  const { data: joinRequests } = trpc.posts.getJoinRequests.useQuery(
+    { postId: postId || '' },
+    {
+      enabled:
+        !!postId &&
+        post?.category === 'study' &&
+        post?.joinPolicy === 'approval' &&
+        currentUser?.id === post?.userId,
+    },
+  );
+
+  const requestToJoinMutation = trpc.posts.requestToJoin.useMutation({
+    onSuccess: () => {
+      utils.posts.getById.invalidate({ id: postId || '' });
+      utils.posts.getInfinite.invalidate();
+    },
+    onError: (err) => {
+      showAlert('Request failed', err.message || 'Could not send join request.');
+    },
+  });
+
+  const respondToJoinRequestMutation = trpc.posts.respondToJoinRequest.useMutation({
+    onSuccess: () => {
+      utils.posts.getById.invalidate({ id: postId || '' });
+      utils.posts.getInfinite.invalidate();
+      utils.posts.getJoinRequests.invalidate({ postId: postId || '' });
+    },
+  });
+
+  const upsertConversationMutation = trpc.messages.upsertConversation.useMutation({
+    onSuccess: (conv) => {
+      router.push(`/chat/${conv.id}` as any);
+    },
+  });
 
   const toggleLikeMutation = trpc.posts.toggleLike.useMutation({
     onSuccess: () => {
@@ -86,7 +138,29 @@ export default function PostDetailScreen() {
 
   const handleToggleLike = () => {
     if (!post) return;
+    const isOwner = currentUser?.id === post.userId;
+    const isMember = !!currentUser && post.likedBy?.includes(currentUser.id);
+    if (post.category === 'study' && post.joinPolicy === 'approval' && !isOwner && !isMember) {
+      if (post.joinRequestStatus === 'pending') return;
+      requestToJoinMutation.mutate({ postId: post.id });
+      return;
+    }
     toggleLikeMutation.mutate({ postId: post.id });
+  };
+
+  const handleRespondToJoinRequest = (requesterId: string, action: 'approve' | 'decline') => {
+    if (!post) return;
+    respondToJoinRequestMutation.mutate({ postId: post.id, requesterId, action });
+  };
+
+  const handleMessageSeller = () => {
+    if (!post) return;
+    upsertConversationMutation.mutate({ otherUserId: post.userId, postId: post.id });
+  };
+
+  const handleMarkDealtWith = (buyerId: string | null) => {
+    if (!post) return;
+    markDealtWithMutation.mutate({ postId: post.id, dealtWithUserId: buyerId });
   };
 
   const handleAddComment = useCallback(() => {
@@ -187,6 +261,10 @@ export default function PostDetailScreen() {
 
   const isLiked =
     !!currentUser && post.likedBy && post.likedBy.includes(currentUser.id);
+  const isOwner = currentUser?.id === post.userId;
+  const needsApproval = post.category === 'study' && post.joinPolicy === 'approval' && !isOwner && !isLiked;
+  const isRequestPending = needsApproval && post.joinRequestStatus === 'pending';
+  const pendingRequestCount = joinRequests?.length ?? 0;
 
   return (
     <>
@@ -214,14 +292,116 @@ export default function PostDetailScreen() {
           )}
         </View>
 
-        <Text style={styles.postContent}>{post.content}</Text>
+        {(!!post.taggedUsers?.length || !!post.taggedEventTitle) && (
+          <View style={styles.taggedRow}>
+            {!!post.taggedUsers?.length && (
+              <Text style={styles.taggedText}>
+                with{' '}
+                {post.taggedUsers.map((tagged: { id: string; name: string }, i: number) => (
+                  <Text
+                    key={tagged.id}
+                    style={styles.taggedName}
+                    onPress={() =>
+                      tagged.id === currentUser?.id
+                        ? router.push('/(tabs)/profile')
+                        : router.push(`/profile/${tagged.id}` as any)
+                    }
+                  >
+                    {tagged.name}
+                    {i < post.taggedUsers!.length - 1 ? ', ' : ''}
+                  </Text>
+                ))}
+              </Text>
+            )}
+            {!!post.taggedEventTitle && (
+              <Text style={styles.taggedText}>
+                {!!post.taggedUsers?.length && '  '}
+                at{' '}
+                <Text style={styles.taggedName} onPress={() => router.push(`/post/${post.taggedEventId}` as any)}>
+                  {post.taggedEventTitle}
+                </Text>
+              </Text>
+            )}
+          </View>
+        )}
 
-        {post.imageUrl && (
-          <Image
-            source={{ uri: post.imageUrl }}
-            style={styles.postImage}
-            resizeMode="contain"
-          />
+        {post.category === 'market' ? (
+          <>
+            <Text style={styles.marketTitle}>{post.title || 'Untitled listing'}</Text>
+
+            {post.imageUrl && (
+              <PostMedia uri={post.imageUrl} mediaType={post.mediaType} style={styles.marketImage} resizeMode="cover" />
+            )}
+
+            <View style={styles.marketMetaRow}>
+              {post.price != null && (
+                <View style={styles.priceBadge}>
+                  <Tag size={13} color={INK} strokeWidth={2.5} />
+                  <Text style={styles.priceBadgeText}>{post.price === 0 ? 'Free' : `$${post.price}`}</Text>
+                </View>
+              )}
+              {!!post.dealtWithUserId && (
+                <View style={styles.soldBadge}>
+                  <Text style={styles.soldBadgeText}>Sold</Text>
+                </View>
+              )}
+            </View>
+
+            {!!post.condition && <Text style={styles.marketCondition}>{post.condition}</Text>}
+
+            {!!post.tags?.length && (
+              <View style={styles.tagRow}>
+                {post.tags.map((tag: string) => (
+                  <Chip key={tag} label={tag} variant="outline" color={palette.skyBlue} size="sm" />
+                ))}
+              </View>
+            )}
+
+            <Text style={styles.postContent}>{post.content}</Text>
+
+            {currentUser?.id === post.userId ? (
+              post.dealtWithUserId ? (
+                <View style={styles.dealtWithRow}>
+                  <Text style={styles.dealtWithText}>Sold to {post.dealtWithUserName || 'a buyer'}</Text>
+                  <TouchableOpacity onPress={() => handleMarkDealtWith(null)} disabled={markDealtWithMutation.isPending}>
+                    <Text style={styles.undoText}>Undo</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.marketCtaWrap}>
+                  <HardShadow offset={5} radius={16} />
+                  <TouchableOpacity style={styles.marketCtaButton} onPress={() => setDealtWithPickerVisible(true)}>
+                    <Text style={styles.marketCtaText}>Mark as Dealt With</Text>
+                  </TouchableOpacity>
+                </View>
+              )
+            ) : (
+              <View style={styles.marketCtaWrap}>
+                {!post.dealtWithUserId && <HardShadow offset={5} radius={16} />}
+                <TouchableOpacity
+                  style={[styles.marketCtaButton, !!post.dealtWithUserId && styles.marketCtaButtonDisabled]}
+                  onPress={handleMessageSeller}
+                  disabled={!!post.dealtWithUserId || upsertConversationMutation.isPending}
+                >
+                  {upsertConversationMutation.isPending ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={[styles.marketCtaText, !!post.dealtWithUserId && styles.marketCtaTextDisabled]}>
+                      {post.dealtWithUserId ? 'Already Sold' : 'Message Seller'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+          </>
+        ) : (
+          <>
+            <Text style={styles.postContent}>{post.content}</Text>
+
+            {post.imageUrl && (
+              <PostMedia uri={post.imageUrl} mediaType={post.mediaType} style={styles.postImage} resizeMode="contain" />
+            )}
+          </>
         )}
 
         <View style={styles.postActions}>
@@ -229,12 +409,13 @@ export default function PostDetailScreen() {
             style={({ pressed }) => [
               styles.actionButton,
               post.category === 'events' && isLiked && styles.interestActive,
+              post.category === 'study' && (isLiked || isRequestPending) && styles.studyActive,
               { transform: [{ scale: pressed ? 0.94 : 1 }] },
             ]}
             onPress={handleToggleLike}
-            disabled={toggleLikeMutation.isPending}
+            disabled={toggleLikeMutation.isPending || requestToJoinMutation.isPending || isRequestPending}
           >
-            {toggleLikeMutation.isPending ? (
+            {toggleLikeMutation.isPending || requestToJoinMutation.isPending ? (
               <ActivityIndicator size="small" color={Colors.light.textSecondary} />
             ) : post.category === 'events' ? (
               <Star
@@ -243,7 +424,7 @@ export default function PostDetailScreen() {
                 fill={isLiked ? '#FFFFFF' : 'transparent'}
                 strokeWidth={2.5}
               />
-            ) : (
+            ) : post.category === 'study' ? null : (
               <Heart
                 size={20}
                 color={isLiked ? Colors.light.error : Colors.light.textSecondary}
@@ -254,7 +435,12 @@ export default function PostDetailScreen() {
             <Text
               style={[
                 styles.actionText,
-                isLiked && (post.category === 'events' ? styles.interestTextActive : styles.actionTextActive),
+                (isLiked || isRequestPending) &&
+                  (post.category === 'events'
+                    ? styles.interestTextActive
+                    : post.category === 'study'
+                      ? styles.studyTextActive
+                      : styles.actionTextActive),
               ]}
             >
               {post.category === 'events'
@@ -264,10 +450,22 @@ export default function PostDetailScreen() {
                 : post.category === 'study'
                 ? isLiked
                   ? 'Joined'
-                  : 'Join'
+                  : isRequestPending
+                    ? 'Requested'
+                    : needsApproval
+                      ? 'Request to Join'
+                      : 'Join'
                 : post.likes}
             </Text>
           </Pressable>
+
+          {post.category === 'study' && post.joinPolicy === 'approval' && isOwner && (
+            <Pressable style={styles.actionButton} onPress={() => setJoinRequestsPickerVisible(true)}>
+              <Text style={styles.actionText}>
+                Requests{pendingRequestCount > 0 ? ` (${pendingRequestCount})` : ''}
+              </Text>
+            </Pressable>
+          )}
 
           <View style={styles.actionButton}>
             <MessageCircle size={20} color={Colors.light.textSecondary} strokeWidth={2.5} />
@@ -483,6 +681,89 @@ export default function PostDetailScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
+      <Modal
+        visible={dealtWithPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDealtWithPickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.optionsOverlay}
+          activeOpacity={1}
+          onPress={() => setDealtWithPickerVisible(false)}
+        >
+          <View style={styles.optionsCard}>
+            <Text style={styles.modalTitle}>Who did you deal with?</Text>
+            {(inquirers?.length ?? 0) === 0 ? (
+              <Text style={styles.noCommentsText}>No one has messaged you about this listing yet.</Text>
+            ) : (
+              inquirers?.map((inquirer) => (
+                <TouchableOpacity
+                  key={inquirer.userId}
+                  style={styles.inquirerRow}
+                  onPress={() => handleMarkDealtWith(inquirer.userId)}
+                  disabled={markDealtWithMutation.isPending}
+                >
+                  <Avatar uri={inquirer.userAvatar} name={inquirer.userName} size={32} />
+                  <Text style={styles.inquirerName}>{inquirer.userName}</Text>
+                </TouchableOpacity>
+              ))
+            )}
+            <TouchableOpacity style={styles.optionsCancel} onPress={() => setDealtWithPickerVisible(false)}>
+              <Text style={styles.optionsCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={joinRequestsPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setJoinRequestsPickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.optionsOverlay}
+          activeOpacity={1}
+          onPress={() => setJoinRequestsPickerVisible(false)}
+        >
+          <View style={styles.optionsCard}>
+            <Text style={styles.modalTitle}>Join requests</Text>
+            {(joinRequests?.length ?? 0) === 0 ? (
+              <Text style={styles.noCommentsText}>No pending requests right now.</Text>
+            ) : (
+              joinRequests?.map((request) => (
+                <View key={request.userId} style={styles.joinRequestRow}>
+                  <Avatar uri={request.userAvatar} name={request.userName} size={32} />
+                  <Text style={[styles.inquirerName, styles.joinRequestName]} numberOfLines={1}>
+                    {request.userName}
+                  </Text>
+                  <View style={styles.joinRequestActions}>
+                    <TouchableOpacity
+                      style={styles.joinRequestApprove}
+                      onPress={() => handleRespondToJoinRequest(request.userId, 'approve')}
+                      disabled={respondToJoinRequestMutation.isPending}
+                    >
+                      <Text style={styles.joinRequestApproveText}>Approve</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.joinRequestDecline}
+                      onPress={() => handleRespondToJoinRequest(request.userId, 'decline')}
+                      disabled={respondToJoinRequestMutation.isPending}
+                    >
+                      <Text style={styles.joinRequestDeclineText}>Decline</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))
+            )}
+            <TouchableOpacity style={styles.optionsCancel} onPress={() => setJoinRequestsPickerVisible(false)}>
+              <Text style={styles.optionsCancelText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       <View style={styles.addCommentBar}>
         <TextInput
           style={styles.commentInput}
@@ -616,6 +897,22 @@ const styles = StyleSheet.create({
     color: Colors.light.textSecondary,
     marginTop: 2,
   },
+  taggedRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: -4,
+    marginBottom: 8,
+  },
+  taggedText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.light.textSecondary,
+  },
+  taggedName: {
+    fontSize: 13,
+    fontWeight: '900' as const,
+    color: palette.blue,
+  },
   postContent: {
     fontSize: 15,
     fontWeight: '600' as const,
@@ -638,6 +935,165 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: 2.5,
     borderTopColor: INK,
+  },
+  marketTitle: {
+    fontSize: 20,
+    fontWeight: '900' as const,
+    color: Colors.light.text,
+    marginBottom: 10,
+  },
+  marketImage: {
+    width: '100%',
+    height: 320,
+    borderRadius: 16,
+    borderWidth: 2.5,
+    borderColor: INK,
+    marginBottom: 12,
+    backgroundColor: Colors.light.backgroundSecondary,
+  },
+  marketMetaRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  priceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: palette.amber,
+    borderWidth: 2,
+    borderColor: INK,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignSelf: 'flex-start',
+  },
+  priceBadgeText: {
+    fontSize: 15,
+    fontWeight: '900' as const,
+    color: INK,
+  },
+  soldBadge: {
+    backgroundColor: palette.rust,
+    borderWidth: 2,
+    borderColor: INK,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignSelf: 'flex-start',
+  },
+  soldBadgeText: {
+    fontSize: 13,
+    fontWeight: '900' as const,
+    color: '#FFFFFF',
+  },
+  marketCondition: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: Colors.light.textSecondary,
+    marginBottom: 8,
+  },
+  tagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 10,
+  },
+  marketCtaWrap: {
+    position: 'relative',
+    marginTop: 4,
+  },
+  marketCtaButton: {
+    backgroundColor: palette.blue,
+    borderRadius: 16,
+    borderWidth: 2.5,
+    borderColor: INK,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  marketCtaButtonDisabled: {
+    backgroundColor: '#FFFFFF',
+  },
+  marketCtaText: {
+    fontSize: 15,
+    fontWeight: '900' as const,
+    color: '#FFFFFF',
+  },
+  marketCtaTextDisabled: {
+    color: Colors.light.textSecondary,
+  },
+  dealtWithRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.light.background,
+    borderWidth: 2,
+    borderColor: INK,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 4,
+  },
+  dealtWithText: {
+    fontSize: 14,
+    fontWeight: '800' as const,
+    color: Colors.light.text,
+  },
+  undoText: {
+    fontSize: 13,
+    fontWeight: '800' as const,
+    color: Colors.light.primary,
+  },
+  inquirerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+  },
+  inquirerName: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: Colors.light.text,
+  },
+  joinRequestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+  },
+  joinRequestName: {
+    flex: 1,
+    minWidth: 0,
+  },
+  joinRequestActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  joinRequestApprove: {
+    backgroundColor: palette.blue,
+    borderWidth: 2,
+    borderColor: INK,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  joinRequestApproveText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '900' as const,
+  },
+  joinRequestDecline: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: INK,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  joinRequestDeclineText: {
+    color: Colors.light.textSecondary,
+    fontSize: 12,
+    fontWeight: '900' as const,
   },
   postInput: {
     backgroundColor: Colors.light.card,
@@ -693,6 +1149,15 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   interestTextActive: {
+    color: '#FFFFFF',
+  },
+  studyActive: {
+    backgroundColor: palette.blue,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  studyTextActive: {
     color: '#FFFFFF',
   },
   commentsSectionWrap: {

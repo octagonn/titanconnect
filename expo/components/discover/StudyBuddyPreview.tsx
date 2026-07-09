@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity, Pressable, ActivityIndicator } from 'react-native';
-import { BookOpen, Clock, MapPin } from 'lucide-react-native';
+import { BookOpen, Clock, MapPin, Users } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import HardShadow from '@/components/ui/HardShadow';
@@ -24,10 +24,19 @@ export default function StudyBuddyPreview() {
     onSuccess: () => utils.posts.getInfinite.invalidate(),
   });
 
+  const requestToJoinMutation = trpc.posts.requestToJoin.useMutation({
+    onSuccess: () => utils.posts.getInfinite.invalidate(),
+  });
+
   const groups = data?.pages.flatMap((page) => page.items) ?? [];
 
   const toggleJoin = (postId: string) => {
     toggleLikeMutation.mutate({ postId });
+    Haptics.selectionAsync();
+  };
+
+  const requestJoin = (postId: string) => {
+    requestToJoinMutation.mutate({ postId });
     Haptics.selectionAsync();
   };
 
@@ -51,6 +60,9 @@ export default function StudyBuddyPreview() {
     <View style={styles.list}>
       {groups.map((group) => {
         const isJoined = currentUser ? group.likedBy.includes(currentUser.id) : false;
+        const isOwner = currentUser?.id === group.userId;
+        const needsApproval = group.joinPolicy === 'approval' && !isOwner && !isJoined;
+        const isPending = needsApproval && group.joinRequestStatus === 'pending';
         return (
           <TouchableOpacity
             key={group.id}
@@ -98,33 +110,49 @@ export default function StudyBuddyPreview() {
               )}
 
               <View style={styles.footerRow}>
-                <Pressable
-                  style={styles.hostRow}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    router.push(`/profile/${group.userId}` as any);
-                  }}
-                >
-                  <Avatar name={group.userName} uri={group.userAvatar} size={28} />
-                  <Text style={styles.hostText}>{group.userName} · {group.likes} joined</Text>
-                </Pressable>
+                <View style={styles.hostColumn}>
+                  <Pressable
+                    style={styles.hostRow}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      router.push(`/profile/${group.userId}` as any);
+                    }}
+                  >
+                    <Avatar name={group.userName} uri={group.userAvatar} size={28} />
+                    <Text style={styles.hostText} numberOfLines={1}>{group.userName}</Text>
+                  </Pressable>
+                  <View style={styles.peopleRow}>
+                    <Users size={12} color={Colors.light.textSecondary} strokeWidth={2.5} />
+                    <Text style={styles.peopleText}>{group.likes} joined</Text>
+                  </View>
+                </View>
                 <Pressable
                   style={({ pressed }) => [
                     styles.joinBtn,
-                    isJoined && styles.joinBtnActive,
+                    (isJoined || isPending) && styles.joinBtnActive,
                     { transform: [{ scale: pressed ? 0.94 : 1 }] },
                   ]}
                   onPress={(e) => {
                     e.stopPropagation();
-                    toggleJoin(group.id);
+                    if (isPending) return;
+                    if (needsApproval) {
+                      requestJoin(group.id);
+                    } else {
+                      toggleJoin(group.id);
+                    }
                   }}
-                  disabled={toggleLikeMutation.isPending && toggleLikeMutation.variables?.postId === group.id}
+                  disabled={
+                    isPending ||
+                    (toggleLikeMutation.isPending && toggleLikeMutation.variables?.postId === group.id) ||
+                    (requestToJoinMutation.isPending && requestToJoinMutation.variables?.postId === group.id)
+                  }
                 >
-                  {toggleLikeMutation.isPending && toggleLikeMutation.variables?.postId === group.id ? (
-                    <ActivityIndicator size="small" color={isJoined ? INK : '#FFFFFF'} />
+                  {(toggleLikeMutation.isPending && toggleLikeMutation.variables?.postId === group.id) ||
+                  (requestToJoinMutation.isPending && requestToJoinMutation.variables?.postId === group.id) ? (
+                    <ActivityIndicator size="small" color={isJoined || isPending ? INK : '#FFFFFF'} />
                   ) : (
-                    <Text style={[styles.joinBtnText, isJoined && styles.joinBtnTextActive]}>
-                      {isJoined ? 'Joined' : 'Join'}
+                    <Text style={[styles.joinBtnText, (isJoined || isPending) && styles.joinBtnTextActive]}>
+                      {isJoined ? 'Joined' : isPending ? 'Requested' : needsApproval ? 'Request to Join' : 'Join'}
                     </Text>
                   )}
                 </Pressable>
@@ -214,6 +242,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 2,
   },
+  hostColumn: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
   hostRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -224,6 +257,17 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: Colors.light.textSecondary,
   },
+  peopleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginLeft: 36,
+  },
+  peopleText: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: Colors.light.textSecondary,
+  },
   joinBtn: {
     borderWidth: 2,
     borderColor: INK,
@@ -231,6 +275,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     backgroundColor: palette.blue,
+    flexShrink: 0,
   },
   joinBtnActive: {
     backgroundColor: '#FFFFFF',

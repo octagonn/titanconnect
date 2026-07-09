@@ -2,9 +2,13 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "../../create-context";
 import { TRPCError } from "@trpc/server";
 
-function mapPost(post: any, currentUserId?: string) {
+function mapPost(post: any, currentUserId?: string, taggedEventTitles?: Map<string, string>) {
   const isAnon = post.category === 'anon';
   const votes: { user_id: string; option_index: number }[] = post.post_votes ?? [];
+  const joinRequests: { requester_id: string; status: string }[] = post.study_join_requests ?? [];
+  const myJoinRequest = currentUserId
+    ? joinRequests.find((r) => r.requester_id === currentUserId)
+    : undefined;
 
   let pollVotes: number[] | undefined;
   if (post.subtype === 'poll' && Array.isArray(post.poll_options)) {
@@ -47,6 +51,18 @@ function mapPost(post: any, currentUserId?: string) {
     wishboneVotes,
     myVoteIndex,
     tags: post.tags ?? undefined,
+    dealtWithUserId: post.dealt_with_user_id ?? undefined,
+    dealtWithUserName: post.dealt_with_profile?.name ?? undefined,
+    joinPolicy: (post.join_policy ?? 'open') as 'open' | 'approval',
+    joinRequestStatus: myJoinRequest?.status as 'pending' | 'approved' | 'declined' | undefined,
+    mediaType: (post.media_type ?? 'image') as 'image' | 'video',
+    taggedUsers: (post.post_tagged_users ?? []).map((t: any) => ({
+      id: t.user_id,
+      name: t.profiles?.name || 'Unknown',
+      avatar: t.profiles?.avatar_url,
+    })),
+    taggedEventId: post.tagged_event_id ?? undefined,
+    taggedEventTitle: post.tagged_event_id ? taggedEventTitles?.get(post.tagged_event_id) : undefined,
     likes: post.likes ? post.likes.length : 0,
     likedBy: post.likes ? post.likes.map((l: any) => l.user_id) : [],
     comments: post.comments
@@ -64,6 +80,21 @@ function mapPost(post: any, currentUserId?: string) {
     createdAt: post.created_at,
     category: post.category,
   };
+}
+
+// PostgREST doesn't reliably embed a self-referencing FK (posts.tagged_event_id
+// -> posts.id) via the `!fkey` hint, so tagged-event titles are resolved with
+// a plain follow-up lookup instead of trying to embed them in the main select.
+async function fetchTaggedEventTitles(supabase: any, posts: any[]): Promise<Map<string, string>> {
+  const eventIds = Array.from(
+    new Set(posts.map((p) => p.tagged_event_id).filter((id): id is string => !!id))
+  );
+  if (eventIds.length === 0) return new Map();
+
+  const { data, error } = await supabase.from('posts').select('id, title').in('id', eventIds);
+  if (error || !data) return new Map();
+
+  return new Map(data.map((row: any) => [row.id, row.title as string]));
 }
 
 export const postsRouter = createTRPCRouter({
@@ -84,12 +115,26 @@ export const postsRouter = createTRPCRouter({
         .from('posts')
         .select(`
           *,
-          profiles (
+          profiles!posts_user_id_fkey (
             name,
             avatar_url
           ),
+          dealt_with_profile:profiles!posts_dealt_with_user_id_fkey (
+            name
+          ),
           likes (
             user_id
+          ),
+          study_join_requests (
+            requester_id,
+            status
+          ),
+          post_tagged_users (
+            user_id,
+            profiles (
+              name,
+              avatar_url
+            )
           ),
           post_votes (
             user_id,
@@ -140,7 +185,8 @@ export const postsRouter = createTRPCRouter({
         nextCursor = nextItem?.created_at;
       }
 
-      const posts = data.map((post: any) => mapPost(post, ctx.user?.id));
+      const taggedEventTitles = await fetchTaggedEventTitles(ctx.supabase, data);
+      const posts = data.map((post: any) => mapPost(post, ctx.user?.id, taggedEventTitles));
 
       return {
         items: posts,
@@ -161,12 +207,26 @@ export const postsRouter = createTRPCRouter({
         .from('posts')
         .select(`
           *,
-          profiles (
+          profiles!posts_user_id_fkey (
             name,
             avatar_url
           ),
+          dealt_with_profile:profiles!posts_dealt_with_user_id_fkey (
+            name
+          ),
           likes (
             user_id
+          ),
+          study_join_requests (
+            requester_id,
+            status
+          ),
+          post_tagged_users (
+            user_id,
+            profiles (
+              name,
+              avatar_url
+            )
           ),
           post_votes (
             user_id,
@@ -201,7 +261,8 @@ export const postsRouter = createTRPCRouter({
         });
       }
 
-      return mapPost(data, ctx.user?.id);
+      const taggedEventTitles = await fetchTaggedEventTitles(ctx.supabase, [data]);
+      return mapPost(data, ctx.user?.id, taggedEventTitles);
     }),
 
   getJoined: protectedProcedure.query(async ({ ctx }) => {
@@ -223,12 +284,26 @@ export const postsRouter = createTRPCRouter({
       .from('posts')
       .select(`
         *,
-        profiles (
+        profiles!posts_user_id_fkey (
           name,
           avatar_url
         ),
+        dealt_with_profile:profiles!posts_dealt_with_user_id_fkey (
+          name
+        ),
         likes (
           user_id
+        ),
+        study_join_requests (
+          requester_id,
+          status
+        ),
+        post_tagged_users (
+          user_id,
+          profiles (
+            name,
+            avatar_url
+          )
         ),
         post_votes (
           user_id,
@@ -253,7 +328,8 @@ export const postsRouter = createTRPCRouter({
       throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error.message });
     }
 
-    return data.map((post: any) => mapPost(post, ctx.user.id));
+    const taggedEventTitles = await fetchTaggedEventTitles(ctx.supabase, data);
+    return data.map((post: any) => mapPost(post, ctx.user.id, taggedEventTitles));
   }),
 
   create: protectedProcedure
@@ -272,6 +348,10 @@ export const postsRouter = createTRPCRouter({
         subtype: z.enum(['thought', 'poll', 'wishbone']).optional(),
         pollOptions: z.array(z.string().min(1)).min(2).max(4).optional(),
         tags: z.array(z.string().min(1)).max(6).optional(),
+        joinPolicy: z.enum(['open', 'approval']).optional(),
+        mediaType: z.enum(['image', 'video']).optional(),
+        taggedUserIds: z.array(z.string().uuid()).max(10).optional(),
+        taggedEventId: z.string().uuid().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -289,6 +369,10 @@ export const postsRouter = createTRPCRouter({
         subtype,
         pollOptions,
         tags,
+        joinPolicy,
+        mediaType,
+        taggedUserIds,
+        taggedEventId,
       } = input;
 
       const { data, error } = await ctx.supabase
@@ -308,6 +392,9 @@ export const postsRouter = createTRPCRouter({
           subtype,
           poll_options: pollOptions ? pollOptions.map((label, id) => ({ id, label })) : undefined,
           tags,
+          join_policy: category === 'study' ? (joinPolicy ?? 'open') : 'open',
+          media_type: mediaType ?? 'image',
+          tagged_event_id: category === 'all' ? taggedEventId : undefined,
         })
         .select()
         .single();
@@ -317,6 +404,16 @@ export const postsRouter = createTRPCRouter({
           code: 'INTERNAL_SERVER_ERROR',
           message: error.message,
         });
+      }
+
+      if (category === 'all' && taggedUserIds?.length) {
+        const { error: tagError } = await ctx.supabase
+          .from('post_tagged_users')
+          .insert(taggedUserIds.map((userId) => ({ post_id: data.id, user_id: userId })));
+
+        if (tagError) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: tagError.message });
+        }
       }
 
       return data;
@@ -429,6 +526,24 @@ export const postsRouter = createTRPCRouter({
           code: 'INTERNAL_SERVER_ERROR',
           message: checkError.message,
         });
+      }
+
+      if (!existingLike) {
+        const { data: post, error: postError } = await ctx.supabase
+          .from('posts')
+          .select('category, join_policy, user_id')
+          .eq('id', postId)
+          .maybeSingle();
+
+        if (postError) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: postError.message });
+        }
+        if (post?.category === 'study' && post.join_policy === 'approval' && post.user_id !== userId) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'This study group requires host approval — send a join request instead.',
+          });
+        }
       }
 
       if (existingLike) {
@@ -611,6 +726,219 @@ export const postsRouter = createTRPCRouter({
       }
 
       return { success: true };
+    }),
+
+  getInquirers: protectedProcedure
+    .input(z.object({ postId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const { postId } = input;
+
+      const { data: post, error: postError } = await ctx.supabase
+        .from('posts')
+        .select('id, user_id')
+        .eq('id', postId)
+        .maybeSingle();
+
+      if (postError) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: postError.message });
+      }
+      if (!post || post.user_id !== ctx.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the seller can view inquirers' });
+      }
+
+      const { data, error } = await ctx.supabase
+        .from('listing_inquiries')
+        .select(`
+          buyer_id,
+          profiles (
+            name,
+            avatar_url
+          )
+        `)
+        .eq('post_id', postId);
+
+      if (error) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error.message });
+      }
+
+      return (data ?? []).map((row: any) => ({
+        userId: row.buyer_id,
+        userName: row.profiles?.name || 'Unknown',
+        userAvatar: row.profiles?.avatar_url,
+      }));
+    }),
+
+  markDealtWith: protectedProcedure
+    .input(z.object({ postId: z.string(), dealtWithUserId: z.string().uuid().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const { postId, dealtWithUserId } = input;
+
+      const { data: post, error: postError } = await ctx.supabase
+        .from('posts')
+        .select('id, user_id')
+        .eq('id', postId)
+        .maybeSingle();
+
+      if (postError) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: postError.message });
+      }
+      if (!post || post.user_id !== ctx.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the seller can mark this listing' });
+      }
+
+      if (dealtWithUserId) {
+        const { data: inquiry, error: inquiryError } = await ctx.supabase
+          .from('listing_inquiries')
+          .select('id')
+          .eq('post_id', postId)
+          .eq('buyer_id', dealtWithUserId)
+          .maybeSingle();
+
+        if (inquiryError) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: inquiryError.message });
+        }
+        if (!inquiry) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'That user has not messaged you about this listing',
+          });
+        }
+      }
+
+      const { data, error } = await ctx.supabase
+        .from('posts')
+        .update({ dealt_with_user_id: dealtWithUserId })
+        .eq('id', postId)
+        .select()
+        .single();
+
+      if (error) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error.message });
+      }
+
+      return data;
+    }),
+
+  getJoinRequests: protectedProcedure
+    .input(z.object({ postId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const { postId } = input;
+
+      const { data: post, error: postError } = await ctx.supabase
+        .from('posts')
+        .select('id, user_id')
+        .eq('id', postId)
+        .maybeSingle();
+
+      if (postError) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: postError.message });
+      }
+      if (!post || post.user_id !== ctx.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the host can view join requests' });
+      }
+
+      const { data, error } = await ctx.supabase
+        .from('study_join_requests')
+        .select(`
+          requester_id,
+          status,
+          profiles!study_join_requests_requester_id_fkey (
+            name,
+            avatar_url
+          )
+        `)
+        .eq('post_id', postId)
+        .eq('status', 'pending');
+
+      if (error) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error.message });
+      }
+
+      return (data ?? []).map((row: any) => ({
+        userId: row.requester_id,
+        userName: row.profiles?.name || 'Unknown',
+        userAvatar: row.profiles?.avatar_url,
+      }));
+    }),
+
+  requestToJoin: protectedProcedure
+    .input(z.object({ postId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { postId } = input;
+
+      const { data: post, error: postError } = await ctx.supabase
+        .from('posts')
+        .select('id, user_id, category, join_policy')
+        .eq('id', postId)
+        .maybeSingle();
+
+      if (postError) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: postError.message });
+      }
+      if (!post) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Post not found' });
+      }
+      if (post.category !== 'study' || post.join_policy !== 'approval') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'This group does not require a join request' });
+      }
+      if (post.user_id === ctx.user.id) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'You already host this group' });
+      }
+
+      const { error } = await ctx.supabase
+        .from('study_join_requests')
+        .upsert(
+          { post_id: postId, requester_id: ctx.user.id, status: 'pending' },
+          { onConflict: 'post_id,requester_id' }
+        );
+
+      if (error) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error.message });
+      }
+
+      return { status: 'pending' as const };
+    }),
+
+  respondToJoinRequest: protectedProcedure
+    .input(z.object({ postId: z.string(), requesterId: z.string().uuid(), action: z.enum(['approve', 'decline']) }))
+    .mutation(async ({ ctx, input }) => {
+      const { postId, requesterId, action } = input;
+
+      const { data: post, error: postError } = await ctx.supabase
+        .from('posts')
+        .select('id, user_id')
+        .eq('id', postId)
+        .maybeSingle();
+
+      if (postError) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: postError.message });
+      }
+      if (!post || post.user_id !== ctx.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the host can respond to join requests' });
+      }
+
+      const { error: updateError } = await ctx.supabase
+        .from('study_join_requests')
+        .update({ status: action === 'approve' ? 'approved' : 'declined' })
+        .eq('post_id', postId)
+        .eq('requester_id', requesterId);
+
+      if (updateError) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: updateError.message });
+      }
+
+      if (action === 'approve') {
+        const { error: likeError } = await ctx.supabase.rpc('approve_study_join', {
+          p_post_id: postId,
+          p_requester_id: requesterId,
+        });
+
+        if (likeError) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: likeError.message });
+        }
+      }
+
+      return { status: action === 'approve' ? 'approved' : 'declined' as const };
     }),
 });
 

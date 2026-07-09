@@ -96,7 +96,10 @@ export default function TabLayout() {
             position: 'absolute',
             left: 0,
             right: 0,
+            top: 0,
+            bottom: 0,
             alignItems: 'center',
+            justifyContent: 'center',
           },
           // The navy masthead prints the app wordmark instead of a per-tab
           // title — per-tab labels already live on the bottom dock below.

@@ -37,6 +37,10 @@ create table if not exists public.posts (
   course text,
   price numeric,
   condition text,
+  dealt_with_user_id uuid references public.profiles(id) on delete set null,
+  join_policy text not null default 'open' check (join_policy in ('open', 'approval')),
+  tagged_event_id uuid references public.posts(id) on delete set null,
+  media_type text not null default 'image' check (media_type in ('image', 'video')),
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -68,6 +72,38 @@ create table if not exists public.comments (
   content text not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Listing inquiries table (tracks which buyers messaged a seller about a
+-- specific marketplace listing, scoping the "mark as dealt with" picker)
+create table if not exists public.listing_inquiries (
+  id uuid default uuid_generate_v4() primary key,
+  post_id uuid references public.posts(id) on delete cascade not null,
+  buyer_id uuid references public.profiles(id) on delete cascade not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique(post_id, buyer_id)
+);
+
+-- Study join requests table (tracks who has asked to join a study group
+-- that requires host approval, vs. the "anyone can join" default)
+create table if not exists public.study_join_requests (
+  id uuid default uuid_generate_v4() primary key,
+  post_id uuid references public.posts(id) on delete cascade not null,
+  requester_id uuid references public.profiles(id) on delete cascade not null,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'declined')),
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique(post_id, requester_id)
+);
+
+-- Post tagged users table (people tagged in a feed post by its author,
+-- e.g. "with Alice, Bob" — tagging an event uses posts.tagged_event_id
+-- instead, since a post can only reference one other post)
+create table if not exists public.post_tagged_users (
+  id uuid default uuid_generate_v4() primary key,
+  post_id uuid references public.posts(id) on delete cascade not null,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique(post_id, user_id)
 );
 
 -- Events table
@@ -131,6 +167,9 @@ alter table public.posts enable row level security;
 alter table public.likes enable row level security;
 alter table public.post_votes enable row level security;
 alter table public.comments enable row level security;
+alter table public.listing_inquiries enable row level security;
+alter table public.study_join_requests enable row level security;
+alter table public.post_tagged_users enable row level security;
 alter table public.events enable row level security;
 alter table public.event_rsvps enable row level security;
 alter table public.connections enable row level security;
@@ -213,6 +252,49 @@ create policy "Users can update their own comments"
 create policy "Users can delete their own comments"
   on public.comments for delete
   using (auth.uid() = user_id);
+
+-- Listing inquiries RLS Policies
+-- Only the listing owner and the inquirer can see an inquiry — it reveals
+-- buyer interest/contact intent, not public like/comment data.
+create policy "Inquiries are viewable by the seller or the buyer"
+  on public.listing_inquiries for select
+  using (
+    auth.uid() = buyer_id
+    or auth.uid() in (select user_id from public.posts where posts.id = post_id)
+  );
+
+create policy "Users can record their own inquiry"
+  on public.listing_inquiries for insert
+  with check (auth.uid() = buyer_id);
+
+-- Study join requests RLS Policies
+create policy "Join requests are viewable by the requester or the host"
+  on public.study_join_requests for select
+  using (
+    auth.uid() = requester_id
+    or auth.uid() in (select user_id from public.posts where posts.id = post_id)
+  );
+
+create policy "Users can create their own join request"
+  on public.study_join_requests for insert
+  with check (auth.uid() = requester_id);
+
+create policy "Users can update their own pending join request"
+  on public.study_join_requests for update
+  using (auth.uid() = requester_id);
+
+create policy "Hosts can respond to join requests on their posts"
+  on public.study_join_requests for update
+  using (auth.uid() in (select user_id from public.posts where posts.id = post_id));
+
+-- Post tagged users RLS Policies
+create policy "Tagged users are viewable by authenticated users"
+  on public.post_tagged_users for select
+  using (auth.role() = 'authenticated');
+
+create policy "Post authors can tag people in their own posts"
+  on public.post_tagged_users for insert
+  with check (auth.uid() in (select user_id from public.posts where posts.id = post_id));
 
 -- Events RLS Policies
 create policy "Events are viewable by authenticated users"
@@ -351,9 +433,38 @@ create index if not exists likes_user_id_idx on public.likes(user_id);
 create index if not exists post_votes_post_id_idx on public.post_votes(post_id);
 create index if not exists post_votes_user_id_idx on public.post_votes(user_id);
 create index if not exists comments_post_id_idx on public.comments(post_id);
+create index if not exists listing_inquiries_post_id_idx on public.listing_inquiries(post_id);
+create index if not exists listing_inquiries_buyer_id_idx on public.listing_inquiries(buyer_id);
+create index if not exists study_join_requests_post_id_idx on public.study_join_requests(post_id);
+create index if not exists study_join_requests_requester_id_idx on public.study_join_requests(requester_id);
+create index if not exists post_tagged_users_post_id_idx on public.post_tagged_users(post_id);
+create index if not exists post_tagged_users_user_id_idx on public.post_tagged_users(user_id);
+create index if not exists posts_tagged_event_id_idx on public.posts(tagged_event_id);
 create index if not exists events_date_idx on public.events(date);
 create index if not exists event_rsvps_event_id_idx on public.event_rsvps(event_id);
 create index if not exists connections_user_id_idx on public.connections(user_id);
 create index if not exists connections_connected_user_id_idx on public.connections(connected_user_id);
 create index if not exists messages_conversation_id_idx on public.messages(conversation_id);
 create index if not exists messages_created_at_idx on public.messages(created_at desc);
+
+-- Approving a join request means the host records someone else (the
+-- requester) as having joined, which the normal "likes are inserted by
+-- their own user_id" RLS policy would reject. This function runs as the
+-- table owner so the host can perform that one specific insert, but only
+-- after verifying (via auth.uid()) that the caller actually owns the post.
+create or replace function public.approve_study_join(p_post_id uuid, p_requester_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (select 1 from public.posts where id = p_post_id and user_id = auth.uid()) then
+    raise exception 'Only the host can approve join requests';
+  end if;
+  insert into public.likes (post_id, user_id) values (p_post_id, p_requester_id)
+    on conflict (post_id, user_id) do nothing;
+end;
+$$;
+
+grant execute on function public.approve_study_join(uuid, uuid) to authenticated;

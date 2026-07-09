@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { Search, Plus } from 'lucide-react-native';
-import { useState, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
+import { useState, useMemo, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Modal, Pressable, ActivityIndicator } from 'react-native';
 import { showAlert } from '@/lib/alert';
 import Colors, { INK, palette } from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
@@ -49,6 +49,49 @@ export default function MessagesScreen() {
   const handleRefresh = useCallback(() => {
     conversationsQuery.refetch();
   }, [conversationsQuery]);
+
+  // Same web/PWA pull-to-refresh workaround as the Discover feed — RN Web's
+  // RefreshControl doesn't render, so drag distance at the top of the list
+  // is tracked manually and triggers a refetch on release.
+  const pullScrollOffsetRef = useRef(0);
+  const pullTouchStartYRef = useRef<number | null>(null);
+  const pullReadyRef = useRef(false);
+  const [pulling, setPulling] = useState(false);
+
+  const handleScroll = useCallback((e: any) => {
+    pullScrollOffsetRef.current = e.nativeEvent.contentOffset.y;
+  }, []);
+
+  const handleTouchStart = useCallback((e: any) => {
+    pullTouchStartYRef.current =
+      pullScrollOffsetRef.current <= 2 ? e.nativeEvent.touches?.[0]?.pageY ?? null : null;
+    pullReadyRef.current = false;
+  }, []);
+
+  const handleTouchMove = useCallback((e: any) => {
+    if (pullTouchStartYRef.current == null) return;
+    const currentY = e.nativeEvent.touches?.[0]?.pageY;
+    if (currentY == null) return;
+    const dy = currentY - pullTouchStartYRef.current;
+    const ready = dy > 70 && pullScrollOffsetRef.current <= 2;
+    pullReadyRef.current = ready;
+    if (ready !== pulling) setPulling(ready);
+  }, [pulling]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (pullReadyRef.current && !conversationsQuery.isRefetching) {
+      handleRefresh();
+    }
+    pullTouchStartYRef.current = null;
+    pullReadyRef.current = false;
+    setPulling(false);
+  }, [conversationsQuery.isRefetching, handleRefresh]);
+
+  const handleScrollEndDrag = useCallback((e: any) => {
+    if (e.nativeEvent.contentOffset.y <= -50 && !conversationsQuery.isRefetching) {
+      handleRefresh();
+    }
+  }, [conversationsQuery.isRefetching, handleRefresh]);
 
   const incomingRequests = useMemo(
     () => connections.filter((c) => c.status === 'pending' && c.direction === 'incoming'),
@@ -107,7 +150,7 @@ export default function MessagesScreen() {
           <HardShadow offset={4} radius={18} />
           <TouchableOpacity style={styles.newMessageButton} onPress={() => setShowNewMessage(true)}>
             <Plus size={18} color="#fff" strokeWidth={2.5} />
-            <Text style={styles.newMessageText}>New Message</Text>
+            <Text style={styles.newMessageText} numberOfLines={1}>New Message</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -130,38 +173,54 @@ export default function MessagesScreen() {
           showsVerticalScrollIndicator={false}
           refreshing={conversationsQuery.isRefetching}
           onRefresh={handleRefresh}
+          onScroll={handleScroll}
+          onScrollEndDrag={handleScrollEndDrag}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          scrollEventThrottle={16}
           ListHeaderComponent={
-            incomingRequests.length > 0 ? (
-              <View style={styles.requestSection}>
-                <Text style={styles.requestTitle}>Friend requests</Text>
-                {incomingRequests.map((req) => (
-                  <ListRow
-                    key={req.id}
-                    avatarUri={req.otherUser?.avatar}
-                    avatarName={req.otherUser?.name}
-                    title={req.otherUser?.name || 'Unknown'}
-                    style={styles.requestRow}
-                    trailing={
-                      <View style={styles.requestActions}>
-                        <Chip
-                          label="Accept"
-                          variant="solid"
-                          color={palette.blue}
-                          size="sm"
-                          onPress={() => handleRespond(req.id, 'accept')}
-                        />
-                        <Chip
-                          label="Decline"
-                          variant="outline"
-                          size="sm"
-                          onPress={() => handleRespond(req.id, 'decline')}
-                        />
-                      </View>
-                    }
-                  />
-                ))}
-              </View>
-            ) : null
+            <>
+              {(pulling || conversationsQuery.isRefetching) && (
+                <View style={styles.pullToRefreshRow}>
+                  <ActivityIndicator size="small" color={Colors.light.primary} />
+                  <Text style={styles.pullToRefreshText}>
+                    {conversationsQuery.isRefetching ? 'Refreshing…' : 'Release to refresh'}
+                  </Text>
+                </View>
+              )}
+              {incomingRequests.length > 0 && (
+                <View style={styles.requestSection}>
+                  <Text style={styles.requestTitle}>Friend requests</Text>
+                  {incomingRequests.map((req) => (
+                    <ListRow
+                      key={req.id}
+                      avatarUri={req.otherUser?.avatar}
+                      avatarName={req.otherUser?.name}
+                      title={req.otherUser?.name || 'Unknown'}
+                      style={styles.requestRow}
+                      trailing={
+                        <View style={styles.requestActions}>
+                          <Chip
+                            label="Accept"
+                            variant="solid"
+                            color={palette.blue}
+                            size="sm"
+                            onPress={() => handleRespond(req.id, 'accept')}
+                          />
+                          <Chip
+                            label="Decline"
+                            variant="outline"
+                            size="sm"
+                            onPress={() => handleRespond(req.id, 'decline')}
+                          />
+                        </View>
+                      }
+                    />
+                  ))}
+                </View>
+              )}
+            </>
           }
         />
       )}
@@ -240,6 +299,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: Colors.light.card,
     borderWidth: 2,
     borderColor: INK,
@@ -253,6 +313,7 @@ const styles = StyleSheet.create({
   newMessageWrap: {
     position: 'relative',
     marginLeft: 8,
+    flexShrink: 0,
   },
   newMessageButton: {
     flexDirection: 'row',
@@ -272,6 +333,18 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingVertical: 8,
+  },
+  pullToRefreshRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingBottom: 12,
+  },
+  pullToRefreshText: {
+    fontSize: 13,
+    fontWeight: '800' as const,
+    color: Colors.light.textSecondary,
   },
   conversationItem: {
     marginHorizontal: 12,

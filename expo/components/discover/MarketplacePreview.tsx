@@ -5,6 +5,7 @@ import * as Haptics from 'expo-haptics';
 import HardShadow from '@/components/ui/HardShadow';
 import Chip from '@/components/ui/Chip';
 import Colors, { INK, palette } from '@/constants/colors';
+import { shadowOffset } from '@/constants/neo';
 import { useAuth } from '@/contexts/AuthContext';
 import { trpc } from '@/lib/trpc';
 
@@ -63,7 +64,7 @@ export default function MarketplacePreview() {
             activeOpacity={0.9}
             onPress={() => router.push(`/post/${item.id}` as any)}
           >
-            <HardShadow offset={6} radius={20} />
+            <HardShadow offset={shadowOffset.raised} radius={20} />
             <View style={styles.card}>
               <View style={[styles.imageBlock, { backgroundColor: palette.skyBlue }]}>
                 <ShoppingBag size={28} color={INK} strokeWidth={2} />
@@ -98,6 +99,11 @@ export default function MarketplacePreview() {
               </View>
               <View style={styles.body}>
                 <Text style={styles.title} numberOfLines={2}>{item.title || 'Untitled listing'}</Text>
+                {!!item.dealtWithUserId && (
+                  <View style={styles.soldBadge}>
+                    <Text style={styles.soldBadgeText}>Sold</Text>
+                  </View>
+                )}
                 {!!item.condition && <Text style={styles.condition}>{item.condition}</Text>}
                 {!!item.tags?.length && (
                   <View style={styles.tagRow}>
@@ -115,7 +121,7 @@ export default function MarketplacePreview() {
                   ]}
                   onPress={(e) => {
                     e.stopPropagation();
-                    if (!isOwnListing) upsertConversation.mutate({ otherUserId: item.userId });
+                    if (!isOwnListing) upsertConversation.mutate({ otherUserId: item.userId, postId: item.id });
                   }}
                   disabled={isOwnListing || (upsertConversation.isPending && upsertConversation.variables?.otherUserId === item.userId)}
                 >
@@ -153,8 +159,7 @@ const styles = StyleSheet.create({
   },
   cardWrap: {
     position: 'relative',
-    width: '46%',
-    flexGrow: 1,
+    width: '45%',
   },
   card: {
     backgroundColor: Colors.light.card,
@@ -213,6 +218,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700' as const,
     color: Colors.light.textSecondary,
+  },
+  soldBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: palette.rust,
+    borderWidth: 1.5,
+    borderColor: INK,
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    marginTop: 2,
+  },
+  soldBadgeText: {
+    fontSize: 10,
+    fontWeight: '900' as const,
+    color: '#FFFFFF',
   },
   tagRow: {
     flexDirection: 'row',

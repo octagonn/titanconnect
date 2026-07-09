@@ -1,5 +1,5 @@
 import { Heart, MessageCircle, Mail, BookOpenText, Image as ImageIcon, X, MoreHorizontal, Award, GraduationCap, University, Rss, Calendar, BookOpen, Ghost, ShoppingBag } from 'lucide-react-native';
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView } from 'react-native';
 import { showAlert } from '@/lib/alert';
 import { getFriendlyErrorMessage } from '@/lib/errors';
@@ -16,6 +16,7 @@ import styles from '@/styles/home.styles';
 import HardShadow from '@/components/ui/HardShadow';
 import Avatar from '@/components/ui/Avatar';
 import Chip from '@/components/ui/Chip';
+import PostMedia from '@/components/ui/PostMedia';
 import EventsPreview from '@/components/discover/EventsPreview';
 import StudyBuddyPreview from '@/components/discover/StudyBuddyPreview';
 import AnonymousPreview from '@/components/discover/AnonymousPreview';
@@ -96,7 +97,7 @@ const TAG_PRESETS: Partial<Record<CreateType, string[]>> = {
 export default function HomeScreen() {
   const { currentUser } = useAuth();
   const router = useRouter();
-  const { isCreateMenuOpen, closeCreateMenu } = useApp();
+  const { isCreateMenuOpen, closeCreateMenu, connections } = useApp();
   const [category, setCategory] = useState<CategoryKey>('feed');
   const [showCreatePost, setShowCreatePost] = useState<boolean>(false);
   const [createType, setCreateType] = useState<CreateType>('all');
@@ -107,16 +108,23 @@ export default function HomeScreen() {
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [customLocation, setCustomLocation] = useState<string>('');
   const [newCourse, setNewCourse] = useState<string>('');
+  const [joinPolicy, setJoinPolicy] = useState<'open' | 'approval'>('open');
   const [newPrice, setNewPrice] = useState<string>('');
   const [selectedPriceOption, setSelectedPriceOption] = useState<string | null>(null);
   const [selectedCondition, setSelectedCondition] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedMediaType, setSelectedMediaType] = useState<'image' | 'video'>('image');
   const [anonSubtype, setAnonSubtype] = useState<AnonSubtype>('thought');
   const [pollOptionInputs, setPollOptionInputs] = useState<string[]>(['', '']);
   const [wishboneLeftImage, setWishboneLeftImage] = useState<string | null>(null);
   const [wishboneRightImage, setWishboneRightImage] = useState<string | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [customTag, setCustomTag] = useState<string>('');
+  const [taggedUserIds, setTaggedUserIds] = useState<string[]>([]);
+  const [taggedEventId, setTaggedEventId] = useState<string | null>(null);
+  const [taggedEventLabel, setTaggedEventLabel] = useState<string>('');
+  const [tagPeoplePickerVisible, setTagPeoplePickerVisible] = useState(false);
+  const [tagEventPickerVisible, setTagEventPickerVisible] = useState(false);
   const [showComments, setShowComments] = useState<string | null>(null);
   const [commentText, setCommentText] = useState<string>('');
   const [isPosting, setIsPosting] = useState(false);
@@ -160,6 +168,7 @@ export default function HomeScreen() {
   } = trpc.posts.getInfinite.useInfiniteQuery(
     {
       limit: 10,
+      category: 'all',
     },
     {
       getNextPageParam: (lastPage) => lastPage.nextCursor,
@@ -167,6 +176,84 @@ export default function HomeScreen() {
   );
 
   const posts = data?.pages.flatMap((page) => page.items) ?? [];
+
+  const { data: taggableEventsData } = trpc.posts.getInfinite.useQuery(
+    { limit: 20, category: 'events' },
+    { enabled: tagEventPickerVisible }
+  );
+  const taggableEvents = taggableEventsData?.items ?? [];
+  const taggableFriends = connections.filter((c) => c.status === 'accepted' && c.otherUser);
+
+  const toggleTaggedUser = (userId: string) => {
+    setTaggedUserIds((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  };
+
+  // react-native-web's ScrollView doesn't render a working RefreshControl —
+  // the native `refreshing`/`onRefresh` FlatList props below are a no-op in
+  // the browser/PWA. This tracks touch drag distance while the list is
+  // scrolled to the top and triggers a refetch on release, independent of
+  // whatever overscroll bounce (or lack of it) the browser provides. Shared
+  // across every Discover category tab (Feed's own FlatList plus the
+  // Events/Study Buddy/Anon/Marketplace ScrollView) since only one is ever
+  // mounted at a time — the trigger below just refreshes whichever is active.
+  const pullScrollOffsetRef = useRef(0);
+  const pullTouchStartYRef = useRef<number | null>(null);
+  const pullReadyRef = useRef(false);
+  const [feedPulling, setFeedPulling] = useState(false);
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+
+  const performRefresh = useCallback(async () => {
+    setManualRefreshing(true);
+    try {
+      if (category === 'feed') {
+        await refetch();
+      } else {
+        await utils.posts.getInfinite.invalidate();
+      }
+    } finally {
+      setManualRefreshing(false);
+    }
+  }, [category, refetch, utils]);
+
+  const isRefreshingActive = category === 'feed' ? isRefetching || manualRefreshing : manualRefreshing;
+
+  const handleFeedScroll = useCallback((e: any) => {
+    pullScrollOffsetRef.current = e.nativeEvent.contentOffset.y;
+  }, []);
+
+  const handleFeedTouchStart = useCallback((e: any) => {
+    pullTouchStartYRef.current =
+      pullScrollOffsetRef.current <= 2 ? e.nativeEvent.touches?.[0]?.pageY ?? null : null;
+    pullReadyRef.current = false;
+  }, []);
+
+  const handleFeedTouchMove = useCallback((e: any) => {
+    if (pullTouchStartYRef.current == null) return;
+    const currentY = e.nativeEvent.touches?.[0]?.pageY;
+    if (currentY == null) return;
+    const dy = currentY - pullTouchStartYRef.current;
+    const ready = dy > 70 && pullScrollOffsetRef.current <= 2;
+    pullReadyRef.current = ready;
+    if (ready !== feedPulling) setFeedPulling(ready);
+  }, [feedPulling]);
+
+  const handleFeedTouchEnd = useCallback(() => {
+    if (pullReadyRef.current && !isRefreshingActive) {
+      Haptics.selectionAsync();
+      performRefresh();
+    }
+    pullTouchStartYRef.current = null;
+    pullReadyRef.current = false;
+    setFeedPulling(false);
+  }, [isRefreshingActive, performRefresh]);
+
+  const handleFeedScrollEndDrag = useCallback((e: any) => {
+    if (e.nativeEvent.contentOffset.y <= -50 && !isRefreshingActive) {
+      performRefresh();
+    }
+  }, [isRefreshingActive, performRefresh]);
 
   const resetCreateForm = () => {
     setNewPostContent('');
@@ -176,16 +263,21 @@ export default function HomeScreen() {
     setSelectedLocation(null);
     setCustomLocation('');
     setNewCourse('');
+    setJoinPolicy('open');
     setNewPrice('');
     setSelectedPriceOption(null);
     setSelectedCondition(null);
     setSelectedImage(null);
+    setSelectedMediaType('image');
     setAnonSubtype('thought');
     setPollOptionInputs(['', '']);
     setWishboneLeftImage(null);
     setWishboneRightImage(null);
     setSelectedTags([]);
     setCustomTag('');
+    setTaggedUserIds([]);
+    setTaggedEventId(null);
+    setTaggedEventLabel('');
     setCreateType('all');
   };
 
@@ -294,7 +386,19 @@ export default function HomeScreen() {
     }
   };
 
-  const pickImage = () => pickImageInto(setSelectedImage);
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      quality: 0.8,
+      videoMaxDuration: 60,
+    });
+
+    if (!result.canceled) {
+      const asset = result.assets[0];
+      setSelectedImage(asset.uri);
+      setSelectedMediaType(asset.type === 'video' ? 'video' : 'image');
+    }
+  };
 
   const updatePollOption = (index: number, text: string) => {
     setPollOptionInputs((prev) => prev.map((opt, i) => (i === index ? text : opt)));
@@ -408,6 +512,10 @@ export default function HomeScreen() {
         price,
         condition: selectedCondition ?? undefined,
         tags: selectedTags.length ? selectedTags : undefined,
+        joinPolicy: createType === 'study' ? joinPolicy : undefined,
+        taggedUserIds: createType === 'all' && taggedUserIds.length ? taggedUserIds : undefined,
+        taggedEventId: createType === 'all' ? taggedEventId ?? undefined : undefined,
+        mediaType: imageUrl ? selectedMediaType : undefined,
       });
     } catch (error) {
       // Error handled in mutation onError
@@ -563,10 +671,46 @@ export default function HomeScreen() {
             )}
           </View>
 
+          {(!!item.taggedUsers?.length || !!item.taggedEventTitle) && (
+            <View style={styles.taggedRow}>
+              {!!item.taggedUsers?.length && (
+                <Text style={styles.taggedText}>
+                  with{' '}
+                  {item.taggedUsers.map((tagged: { id: string; name: string }, i: number) => (
+                    <Text
+                      key={tagged.id}
+                      style={styles.taggedName}
+                      onPress={() =>
+                        tagged.id === currentUser?.id
+                          ? router.push('/(tabs)/profile')
+                          : setProfileModalId(tagged.id)
+                      }
+                    >
+                      {tagged.name}
+                      {i < item.taggedUsers!.length - 1 ? ', ' : ''}
+                    </Text>
+                  ))}
+                </Text>
+              )}
+              {!!item.taggedEventTitle && (
+                <Text style={styles.taggedText}>
+                  {!!item.taggedUsers?.length && '  '}
+                  at{' '}
+                  <Text
+                    style={styles.taggedName}
+                    onPress={() => router.push(`/post/${item.taggedEventId}` as any)}
+                  >
+                    {item.taggedEventTitle}
+                  </Text>
+                </Text>
+              )}
+            </View>
+          )}
+
           <Text style={styles.postContent}>{item.content}</Text>
 
           {item.imageUrl && (
-            <Image source={{ uri: item.imageUrl }} style={styles.postImage} resizeMode="contain" />
+            <PostMedia uri={item.imageUrl} mediaType={item.mediaType} style={styles.postImage} resizeMode="contain" />
           )}
 
           <View style={styles.postActions}>
@@ -906,8 +1050,24 @@ export default function HomeScreen() {
               showsVerticalScrollIndicator={false}
               onEndReached={() => hasNextPage && fetchNextPage()}
               onEndReachedThreshold={0.5}
-              refreshing={isRefetching}
-              onRefresh={refetch}
+              refreshing={isRefreshingActive}
+              onRefresh={performRefresh}
+              onScroll={handleFeedScroll}
+              onScrollEndDrag={handleFeedScrollEndDrag}
+              onTouchStart={handleFeedTouchStart}
+              onTouchMove={handleFeedTouchMove}
+              onTouchEnd={handleFeedTouchEnd}
+              scrollEventThrottle={16}
+              ListHeaderComponent={
+                feedPulling || isRefreshingActive ? (
+                  <View style={styles.pullToRefreshRow}>
+                    <ActivityIndicator size="small" color={Colors.light.primary} />
+                    <Text style={styles.pullToRefreshText}>
+                      {isRefreshingActive ? 'Refreshing…' : 'Release to refresh'}
+                    </Text>
+                  </View>
+                ) : null
+              }
               ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={Colors.light.primary} /> : null}
               ListEmptyComponent={
                 !isLoading && (
@@ -922,7 +1082,25 @@ export default function HomeScreen() {
       )}
 
       {category !== 'feed' && (
-        <ScrollView style={styles.feedContent} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.feedContent}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          onScroll={handleFeedScroll}
+          onScrollEndDrag={handleFeedScrollEndDrag}
+          onTouchStart={handleFeedTouchStart}
+          onTouchMove={handleFeedTouchMove}
+          onTouchEnd={handleFeedTouchEnd}
+          scrollEventThrottle={16}
+        >
+          {(feedPulling || isRefreshingActive) && (
+            <View style={styles.pullToRefreshRow}>
+              <ActivityIndicator size="small" color={Colors.light.primary} />
+              <Text style={styles.pullToRefreshText}>
+                {isRefreshingActive ? 'Refreshing…' : 'Release to refresh'}
+              </Text>
+            </View>
+          )}
           {category === 'events' && <EventsPreview />}
           {category === 'study' && <StudyBuddyPreview />}
           {category === 'anon' && <AnonymousPreview />}
@@ -1049,6 +1227,12 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
 
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalScrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
             {(createType === 'events' || createType === 'study' || createType === 'market') && (
               <TextInput
                 style={styles.extraInput}
@@ -1069,6 +1253,26 @@ export default function HomeScreen() {
                 onChangeText={setNewCourse}
                 testID="post-course-input"
               />
+            )}
+
+            {createType === 'study' && (
+              <>
+                <Text style={styles.fieldLabel}>Who can join?</Text>
+                <View style={styles.chipRow}>
+                  <Chip
+                    label="Anyone can join"
+                    variant={joinPolicy === 'open' ? 'solid' : 'outline'}
+                    color={palette.blue}
+                    onPress={() => setJoinPolicy('open')}
+                  />
+                  <Chip
+                    label="Requires approval"
+                    variant={joinPolicy === 'approval' ? 'solid' : 'outline'}
+                    color={palette.blue}
+                    onPress={() => setJoinPolicy('approval')}
+                  />
+                </View>
+              </>
             )}
 
             {createType === 'anon' && (
@@ -1317,22 +1521,49 @@ export default function HomeScreen() {
                 value={newPostContent}
                 onChangeText={setNewPostContent}
                 multiline
-                autoFocus={!(createType === 'anon' && anonSubtype === 'wishbone')}
+                autoFocus={createType === 'all'}
                 testID="post-content-input"
               />
             )}
 
+            {createType === 'all' && (
+              <>
+                <View style={styles.chipRow}>
+                  <Chip
+                    label={
+                      taggedUserIds.length
+                        ? `Tagged ${taggedUserIds.length} ${taggedUserIds.length === 1 ? 'person' : 'people'}`
+                        : 'Tag people'
+                    }
+                    variant={taggedUserIds.length ? 'solid' : 'outline'}
+                    color={palette.blue}
+                    onPress={() => setTagPeoplePickerVisible(true)}
+                  />
+                  <Chip
+                    label={taggedEventLabel || 'Tag an event'}
+                    variant={taggedEventId ? 'solid' : 'outline'}
+                    color={palette.orange}
+                    onPress={() => setTagEventPickerVisible(true)}
+                  />
+                </View>
+              </>
+            )}
+
             {!(createType === 'anon' && (anonSubtype === 'poll' || anonSubtype === 'wishbone')) && selectedImage && (
               <View style={styles.selectedImageContainer}>
-                <Image source={{ uri: selectedImage }} style={styles.selectedImage} />
+                <PostMedia uri={selectedImage} mediaType={selectedMediaType} style={styles.selectedImage} resizeMode="cover" />
                 <TouchableOpacity
                   style={styles.removeImageButton}
-                  onPress={() => setSelectedImage(null)}
+                  onPress={() => {
+                    setSelectedImage(null);
+                    setSelectedMediaType('image');
+                  }}
                 >
                   <X size={20} color="#fff" />
                 </TouchableOpacity>
               </View>
             )}
+            </ScrollView>
 
             <View style={styles.modalActions}>
               {!(createType === 'anon' && (anonSubtype === 'poll' || anonSubtype === 'wishbone')) && (
@@ -1359,6 +1590,96 @@ export default function HomeScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        visible={tagPeoplePickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTagPeoplePickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.optionsOverlay}
+          activeOpacity={1}
+          onPress={() => setTagPeoplePickerVisible(false)}
+        >
+          <View style={styles.optionsCard}>
+            <Text style={styles.modalTitle}>Tag people</Text>
+            {taggableFriends.length === 0 ? (
+              <Text style={styles.emptySubtext}>Add friends to tag them in your posts.</Text>
+            ) : (
+              taggableFriends.map((friend) => {
+                const isTagged = taggedUserIds.includes(friend.otherUser!.id);
+                return (
+                  <TouchableOpacity
+                    key={friend.otherUser!.id}
+                    style={styles.tagPersonRow}
+                    onPress={() => toggleTaggedUser(friend.otherUser!.id)}
+                  >
+                    <Avatar uri={friend.otherUser?.avatar} name={friend.otherUser?.name} size={32} />
+                    <Text style={styles.tagPersonName}>{friend.otherUser?.name}</Text>
+                    {isTagged && <Text style={styles.tagPersonCheck}>✓</Text>}
+                  </TouchableOpacity>
+                );
+              })
+            )}
+            <TouchableOpacity style={styles.optionsCancel} onPress={() => setTagPeoplePickerVisible(false)}>
+              <Text style={styles.optionsCancelText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={tagEventPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTagEventPickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.optionsOverlay}
+          activeOpacity={1}
+          onPress={() => setTagEventPickerVisible(false)}
+        >
+          <View style={styles.optionsCard}>
+            <Text style={styles.modalTitle}>Tag an event</Text>
+            {taggableEvents.length === 0 ? (
+              <Text style={styles.emptySubtext}>No upcoming events to tag yet.</Text>
+            ) : (
+              <>
+                {taggedEventId && (
+                  <TouchableOpacity
+                    style={styles.tagPersonRow}
+                    onPress={() => {
+                      setTaggedEventId(null);
+                      setTaggedEventLabel('');
+                      setTagEventPickerVisible(false);
+                    }}
+                  >
+                    <Text style={styles.tagPersonName}>Remove tagged event</Text>
+                  </TouchableOpacity>
+                )}
+                {taggableEvents.map((event: Post) => (
+                  <TouchableOpacity
+                    key={event.id}
+                    style={styles.tagPersonRow}
+                    onPress={() => {
+                      setTaggedEventId(event.id);
+                      setTaggedEventLabel(event.title || 'Event');
+                      setTagEventPickerVisible(false);
+                    }}
+                  >
+                    <Text style={styles.tagPersonName}>{event.title || 'Event'}</Text>
+                    {taggedEventId === event.id && <Text style={styles.tagPersonCheck}>✓</Text>}
+                  </TouchableOpacity>
+                ))}
+              </>
+            )}
+            <TouchableOpacity style={styles.optionsCancel} onPress={() => setTagEventPickerVisible(false)}>
+              <Text style={styles.optionsCancelText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </Modal>
 
       <Modal

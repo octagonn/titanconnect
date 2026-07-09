@@ -81,9 +81,22 @@ const findOrCreateConversation = async (
 
 export const messagesRouter = createTRPCRouter({
   upsertConversation: protectedProcedure
-    .input(z.object({ otherUserId: z.string().uuid() }))
+    .input(z.object({ otherUserId: z.string().uuid(), postId: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
+
+      if (input.postId && input.otherUserId !== userId) {
+        const { error: inquiryError } = await ctx.supabase
+          .from('listing_inquiries')
+          .upsert(
+            { post_id: input.postId, buyer_id: userId },
+            { onConflict: 'post_id,buyer_id', ignoreDuplicates: true }
+          );
+        if (inquiryError) {
+          console.error('Error recording listing inquiry:', inquiryError);
+        }
+      }
+
       return findOrCreateConversation(ctx.supabase, userId, input.otherUserId);
     }),
 

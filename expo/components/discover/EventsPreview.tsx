@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity, Pressable, ActivityIndicator } from 'react-native';
-import { Calendar, MapPin, Star } from 'lucide-react-native';
+import { Calendar, MapPin, Star, Users } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import HardShadow from '@/components/ui/HardShadow';
@@ -90,7 +90,10 @@ export default function EventsPreview() {
                   </View>
                 )}
                 <View style={styles.footerRow}>
-                  <Text style={styles.interestedText}>{event.likes} interested</Text>
+                  <View style={styles.interestedRow}>
+                    <Users size={13} color={Colors.light.textSecondary} strokeWidth={2.5} />
+                    <Text style={styles.interestedText}>{event.likes} interested</Text>
+                  </View>
                   <Pressable
                     style={({ pressed }) => [
                       styles.interestBtn,
@@ -194,6 +197,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 4,
+  },
+  interestedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
   interestedText: {
     fontSize: 12,
