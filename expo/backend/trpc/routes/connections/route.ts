@@ -109,6 +109,15 @@ export const connectionsRouter = createTRPCRouter({
               throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
             }
 
+            await ctx.supabase.rpc("award_points", { p_user_id: userId, p_amount: 3 });
+            await ctx.supabase.rpc("award_points", { p_user_id: targetId, p_amount: 3 });
+            await ctx.supabase.rpc("create_notification", {
+              p_recipient_id: targetId,
+              p_actor_id: userId,
+              p_type: "connection_accepted",
+              p_connection_id: data.id,
+            });
+
             return { status: "accepted", connectionId: data.id };
           }
 
@@ -129,6 +138,13 @@ export const connectionsRouter = createTRPCRouter({
       if (error) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
       }
+
+      await ctx.supabase.rpc("create_notification", {
+        p_recipient_id: targetId,
+        p_actor_id: userId,
+        p_type: "connection_request",
+        p_connection_id: data.id,
+      });
 
       return { status: "pending", connectionId: data.id };
     }),
@@ -174,6 +190,16 @@ export const connectionsRouter = createTRPCRouter({
         if (updateError) {
           throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: updateError.message });
         }
+
+        await ctx.supabase.rpc("award_points", { p_user_id: conn.user_id, p_amount: 3 });
+        await ctx.supabase.rpc("award_points", { p_user_id: userId, p_amount: 3 });
+        await ctx.supabase.rpc("create_notification", {
+          p_recipient_id: conn.user_id,
+          p_actor_id: userId,
+          p_type: "connection_accepted",
+          p_connection_id: connectionId,
+        });
+
         return { status: "accepted" };
       }
 

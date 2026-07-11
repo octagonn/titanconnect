@@ -56,6 +56,11 @@ export const [AuthContext, useAuth] = createContextHook(() => {
             isProfileComplete: profile.is_profile_complete,
             role: (profile.role as AuthRole) || 'student',
             createdAt: profile.created_at,
+            instagram: profile.instagram,
+            linkedin: profile.linkedin,
+            linktree: profile.linktree,
+            website: profile.website,
+            points: profile.points ?? 0,
           });
         }
       } else {
@@ -218,6 +223,10 @@ export const [AuthContext, useAuth] = createContextHook(() => {
           interests: updates.interests,
           is_profile_complete: updates.isProfileComplete,
           role: updates.role,
+          instagram: updates.instagram,
+          linkedin: updates.linkedin,
+          linktree: updates.linktree,
+          website: updates.website,
         })
         .eq('id', session.user.id);
 

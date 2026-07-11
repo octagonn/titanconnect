@@ -11,6 +11,7 @@ import { trpc } from '@/lib/trpc';
 import { useMessageRealtime } from '@/hooks/useMessageRealtime';
 import Avatar from '@/components/ui/Avatar';
 import HardShadow from '@/components/ui/HardShadow';
+import PinnedListingCard from '@/components/chat/PinnedListingCard';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -179,6 +180,8 @@ export default function ChatScreen() {
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
         refreshing={messagesQuery.isRefetching}
         onRefresh={messagesQuery.refetch}
+        ListHeaderComponent={otherUser ? <PinnedListingCard otherUserId={otherUser.id} /> : null}
+        stickyHeaderIndices={otherUser ? [0] : undefined}
       />
 
       <View style={styles.inputContainer}>

@@ -24,7 +24,8 @@ export default function PostDetailScreen() {
   const [commentOptions, setCommentOptions] = useState<{ id: string; content: string } | null>(null);
   const [showEditCommentModal, setShowEditCommentModal] = useState(false);
   const [editCommentContent, setEditCommentContent] = useState('');
-  const [dealtWithPickerVisible, setDealtWithPickerVisible] = useState(false);
+  const [offersPickerVisible, setOffersPickerVisible] = useState(false);
+  const [offerAmount, setOfferAmount] = useState('');
   const [joinRequestsPickerVisible, setJoinRequestsPickerVisible] = useState(false);
 
   const utils = trpc.useUtils();
@@ -41,17 +42,65 @@ export default function PostDetailScreen() {
     },
   );
 
-  const { data: inquirers } = trpc.posts.getInquirers.useQuery(
+  const myOfferQuery = trpc.offers.getMine.useQuery(
     { postId: postId || '' },
-    { enabled: !!postId && post?.category === 'market' && currentUser?.id === post?.userId },
+    { enabled: !!postId && post?.category === 'market' && !!currentUser && currentUser.id !== post?.userId },
   );
 
-  const markDealtWithMutation = trpc.posts.markDealtWith.useMutation({
+  const offersListQuery = trpc.offers.listForPost.useQuery(
+    { postId: postId || '' },
+    { enabled: !!postId && post?.category === 'market' && !!currentUser && currentUser.id === post?.userId },
+  );
+
+  const dealPartnerId = post && currentUser
+    ? (currentUser.id === post.userId ? post.dealtWithUserId : post.userId)
+    : undefined;
+
+  const dealQuery = trpc.offers.getForConversation.useQuery(
+    { otherUserId: dealPartnerId || '' },
+    { enabled: !!dealPartnerId && post?.listingStatus === 'pending' },
+  );
+
+  const invalidateOfferQueries = () => {
+    utils.posts.getById.invalidate({ id: postId || '' });
+    utils.posts.getInfinite.invalidate();
+    utils.offers.getMine.invalidate({ postId: postId || '' });
+    utils.offers.listForPost.invalidate({ postId: postId || '' });
+    if (dealPartnerId) utils.offers.getForConversation.invalidate({ otherUserId: dealPartnerId });
+  };
+
+  const submitOfferMutation = trpc.offers.submit.useMutation({
     onSuccess: () => {
-      utils.posts.getById.invalidate({ id: postId || '' });
-      utils.posts.getInfinite.invalidate();
-      setDealtWithPickerVisible(false);
+      invalidateOfferQueries();
+      setOfferAmount('');
     },
+    onError: (err) => showAlert('Offer failed', err.message || 'Could not submit offer.'),
+  });
+
+  const withdrawOfferMutation = trpc.offers.withdraw.useMutation({
+    onSuccess: () => invalidateOfferQueries(),
+  });
+
+  const acceptOfferMutation = trpc.offers.accept.useMutation({
+    onSuccess: () => {
+      invalidateOfferQueries();
+      setOffersPickerVisible(false);
+    },
+    onError: (err) => showAlert('Could not accept offer', err.message || 'Please try again.'),
+  });
+
+  const declineOfferMutation = trpc.offers.decline.useMutation({
+    onSuccess: () => invalidateOfferQueries(),
+  });
+
+  const confirmDealMutation = trpc.offers.confirmCompleted.useMutation({
+    onSuccess: () => invalidateOfferQueries(),
+    onError: (err) => showAlert('Could not confirm', err.message || 'Please try again.'),
+  });
+
+  const cancelDealMutation = trpc.offers.cancelDeal.useMutation({
+    onSuccess: () => invalidateOfferQueries(),
+    onError: (err) => showAlert('Could not cancel', err.message || 'Please try again.'),
   });
 
   const { data: joinRequests } = trpc.posts.getJoinRequests.useQuery(
@@ -158,9 +207,40 @@ export default function PostDetailScreen() {
     upsertConversationMutation.mutate({ otherUserId: post.userId, postId: post.id });
   };
 
-  const handleMarkDealtWith = (buyerId: string | null) => {
+  const handleSubmitOffer = () => {
     if (!post) return;
-    markDealtWithMutation.mutate({ postId: post.id, dealtWithUserId: buyerId });
+    const amount = Number(offerAmount.replace(/[^0-9.]/g, ''));
+    if (!offerAmount.trim() || Number.isNaN(amount) || amount < 0) {
+      showAlert('Enter an amount', 'Please enter a valid offer amount.');
+      return;
+    }
+    submitOfferMutation.mutate({ postId: post.id, amount });
+  };
+
+  const handleWithdrawOffer = () => {
+    if (!myOfferQuery.data) return;
+    withdrawOfferMutation.mutate({ offerId: myOfferQuery.data.id });
+  };
+
+  const handleAcceptOffer = (offerId: string) => {
+    acceptOfferMutation.mutate({ offerId });
+  };
+
+  const handleDeclineOffer = (offerId: string) => {
+    declineOfferMutation.mutate({ offerId });
+  };
+
+  const handleConfirmDeal = () => {
+    if (!post) return;
+    confirmDealMutation.mutate({ postId: post.id });
+  };
+
+  const handleCancelDeal = () => {
+    if (!post) return;
+    showAlert('Cancel this deal?', 'The listing will go back to available and both sides will need to start over.', [
+      { text: 'Never mind', style: 'cancel' },
+      { text: 'Cancel Deal', style: 'destructive', onPress: () => cancelDealMutation.mutate({ postId: post.id }) },
+    ]);
   };
 
   const handleAddComment = useCallback(() => {
@@ -340,7 +420,12 @@ export default function PostDetailScreen() {
                   <Text style={styles.priceBadgeText}>{post.price === 0 ? 'Free' : `$${post.price}`}</Text>
                 </View>
               )}
-              {!!post.dealtWithUserId && (
+              {post.listingStatus === 'pending' && (
+                <View style={styles.pendingBadge}>
+                  <Text style={styles.pendingBadgeText}>Pending</Text>
+                </View>
+              )}
+              {post.listingStatus === 'sold' && (
                 <View style={styles.soldBadge}>
                   <Text style={styles.soldBadgeText}>Sold</Text>
                 </View>
@@ -348,6 +433,15 @@ export default function PostDetailScreen() {
             </View>
 
             {!!post.condition && <Text style={styles.marketCondition}>{post.condition}</Text>}
+
+            {!!post.paymentMethods?.length && (
+              <View style={styles.tagRow}>
+                <Text style={styles.paymentMethodsLabel}>Accepts:</Text>
+                {post.paymentMethods.map((method: string) => (
+                  <Chip key={method} label={method} variant="outline" color={palette.skyBlue} size="sm" />
+                ))}
+              </View>
+            )}
 
             {!!post.tags?.length && (
               <View style={styles.tagRow}>
@@ -359,39 +453,121 @@ export default function PostDetailScreen() {
 
             <Text style={styles.postContent}>{post.content}</Text>
 
-            {currentUser?.id === post.userId ? (
-              post.dealtWithUserId ? (
-                <View style={styles.dealtWithRow}>
-                  <Text style={styles.dealtWithText}>Sold to {post.dealtWithUserName || 'a buyer'}</Text>
-                  <TouchableOpacity onPress={() => handleMarkDealtWith(null)} disabled={markDealtWithMutation.isPending}>
-                    <Text style={styles.undoText}>Undo</Text>
-                  </TouchableOpacity>
-                </View>
+            {post.listingStatus === 'sold' && (
+              <View style={styles.dealtWithRow}>
+                <Text style={styles.dealtWithText}>Sold to {post.dealtWithUserName || 'a buyer'}</Text>
+              </View>
+            )}
+
+            {post.listingStatus === 'pending' && (
+              currentUser?.id === post.userId || currentUser?.id === post.dealtWithUserId ? (
+                <>
+                  <View style={styles.dealtWithRow}>
+                    <View style={styles.dealtWithTextWrap}>
+                      <Text style={styles.dealtWithText}>
+                        Deal in progress with{' '}
+                        {currentUser?.id === post.userId ? (post.dealtWithUserName || 'a buyer') : 'the seller'}
+                      </Text>
+                      <Text style={styles.confirmStatusText}>
+                        {dealQuery.data?.confirmedBySeller ? 'Seller confirmed ✓' : 'Waiting on seller'}
+                        {'  ·  '}
+                        {dealQuery.data?.confirmedByBuyer ? 'Buyer confirmed ✓' : 'Waiting on buyer'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.dealActionsRow}>
+                    <View style={[styles.marketCtaWrap, styles.dealActionsPrimary]}>
+                      <HardShadow offset={5} radius={16} />
+                      <TouchableOpacity
+                        style={styles.marketCtaButton}
+                        onPress={handleConfirmDeal}
+                        disabled={confirmDealMutation.isPending}
+                      >
+                        {confirmDealMutation.isPending ? (
+                          <ActivityIndicator color="#fff" />
+                        ) : (
+                          <Text style={styles.marketCtaText}>Confirm Completed</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                    <TouchableOpacity
+                      onPress={handleCancelDeal}
+                      disabled={cancelDealMutation.isPending}
+                      style={styles.cancelDealButton}
+                    >
+                      <Text style={styles.undoText}>Cancel Deal</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
               ) : (
-                <View style={styles.marketCtaWrap}>
-                  <HardShadow offset={5} radius={16} />
-                  <TouchableOpacity style={styles.marketCtaButton} onPress={() => setDealtWithPickerVisible(true)}>
-                    <Text style={styles.marketCtaText}>Mark as Dealt With</Text>
-                  </TouchableOpacity>
+                <View style={styles.dealtWithRow}>
+                  <Text style={styles.dealtWithText}>Pending a sale to another buyer</Text>
                 </View>
               )
-            ) : (
+            )}
+
+            {post.listingStatus === 'available' && currentUser?.id === post.userId && (
               <View style={styles.marketCtaWrap}>
-                {!post.dealtWithUserId && <HardShadow offset={5} radius={16} />}
-                <TouchableOpacity
-                  style={[styles.marketCtaButton, !!post.dealtWithUserId && styles.marketCtaButtonDisabled]}
-                  onPress={handleMessageSeller}
-                  disabled={!!post.dealtWithUserId || upsertConversationMutation.isPending}
-                >
-                  {upsertConversationMutation.isPending ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={[styles.marketCtaText, !!post.dealtWithUserId && styles.marketCtaTextDisabled]}>
-                      {post.dealtWithUserId ? 'Already Sold' : 'Message Seller'}
-                    </Text>
-                  )}
+                <HardShadow offset={5} radius={16} />
+                <TouchableOpacity style={styles.marketCtaButton} onPress={() => setOffersPickerVisible(true)}>
+                  <Text style={styles.marketCtaText}>
+                    Offers
+                    {offersListQuery.data
+                      ? ` (${offersListQuery.data.filter((o) => o.status === 'pending').length})`
+                      : ''}
+                  </Text>
                 </TouchableOpacity>
               </View>
+            )}
+
+            {post.listingStatus === 'available' && currentUser?.id !== post.userId && (
+              <>
+                {myOfferQuery.data?.status === 'pending' ? (
+                  <View style={styles.dealtWithRow}>
+                    <Text style={styles.dealtWithText}>Your offer: ${myOfferQuery.data.amount}</Text>
+                    <TouchableOpacity onPress={handleWithdrawOffer} disabled={withdrawOfferMutation.isPending}>
+                      <Text style={styles.undoText}>Withdraw</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <>
+                    <View style={styles.offerInputRow}>
+                      <Text style={styles.offerInputPrefix}>$</Text>
+                      <TextInput
+                        style={styles.offerInput}
+                        placeholder={post.price != null ? String(post.price) : 'Enter amount'}
+                        placeholderTextColor={Colors.light.placeholder}
+                        value={offerAmount}
+                        onChangeText={setOfferAmount}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <View style={styles.marketCtaWrap}>
+                      <HardShadow offset={5} radius={16} />
+                      <TouchableOpacity
+                        style={styles.marketCtaButton}
+                        onPress={handleSubmitOffer}
+                        disabled={submitOfferMutation.isPending}
+                      >
+                        {submitOfferMutation.isPending ? (
+                          <ActivityIndicator color="#fff" />
+                        ) : (
+                          <Text style={styles.marketCtaText}>Make Offer</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+                <TouchableOpacity
+                  onPress={handleMessageSeller}
+                  disabled={upsertConversationMutation.isPending}
+                  style={styles.messageSellerLink}
+                >
+                  <Text style={styles.messageSellerLinkText}>
+                    {upsertConversationMutation.isPending ? 'Opening…' : 'Message Seller'}
+                  </Text>
+                </TouchableOpacity>
+              </>
             )}
           </>
         ) : (
@@ -682,35 +858,52 @@ export default function PostDetailScreen() {
       </Modal>
 
       <Modal
-        visible={dealtWithPickerVisible}
+        visible={offersPickerVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setDealtWithPickerVisible(false)}
+        onRequestClose={() => setOffersPickerVisible(false)}
       >
         <TouchableOpacity
           style={styles.optionsOverlay}
           activeOpacity={1}
-          onPress={() => setDealtWithPickerVisible(false)}
+          onPress={() => setOffersPickerVisible(false)}
         >
           <View style={styles.optionsCard}>
-            <Text style={styles.modalTitle}>Who did you deal with?</Text>
-            {(inquirers?.length ?? 0) === 0 ? (
-              <Text style={styles.noCommentsText}>No one has messaged you about this listing yet.</Text>
+            <Text style={styles.modalTitle}>Offers</Text>
+            {(offersListQuery.data?.length ?? 0) === 0 ? (
+              <Text style={styles.noCommentsText}>No offers yet.</Text>
             ) : (
-              inquirers?.map((inquirer) => (
-                <TouchableOpacity
-                  key={inquirer.userId}
-                  style={styles.inquirerRow}
-                  onPress={() => handleMarkDealtWith(inquirer.userId)}
-                  disabled={markDealtWithMutation.isPending}
-                >
-                  <Avatar uri={inquirer.userAvatar} name={inquirer.userName} size={32} />
-                  <Text style={styles.inquirerName}>{inquirer.userName}</Text>
-                </TouchableOpacity>
+              offersListQuery.data?.map((offer) => (
+                <View key={offer.id} style={styles.offerRow}>
+                  <Avatar uri={offer.buyerAvatar} name={offer.buyerName || 'Buyer'} size={32} />
+                  <View style={styles.offerRowBody}>
+                    <Text style={styles.inquirerName}>{offer.buyerName || 'Unknown'}</Text>
+                    <Text style={styles.offerAmountText}>
+                      ${offer.amount}
+                      {offer.status !== 'pending' ? ` · ${offer.status}` : ''}
+                    </Text>
+                  </View>
+                  {offer.status === 'pending' && (
+                    <View style={styles.offerRowActions}>
+                      <TouchableOpacity
+                        onPress={() => handleAcceptOffer(offer.id)}
+                        disabled={acceptOfferMutation.isPending || declineOfferMutation.isPending}
+                      >
+                        <Text style={styles.offerAcceptText}>Accept</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDeclineOffer(offer.id)}
+                        disabled={acceptOfferMutation.isPending || declineOfferMutation.isPending}
+                      >
+                        <Text style={styles.offerDeclineText}>Decline</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
               ))
             )}
-            <TouchableOpacity style={styles.optionsCancel} onPress={() => setDealtWithPickerVisible(false)}>
-              <Text style={styles.optionsCancelText}>Cancel</Text>
+            <TouchableOpacity style={styles.optionsCancel} onPress={() => setOffersPickerVisible(false)}>
+              <Text style={styles.optionsCancelText}>Close</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -1039,10 +1232,116 @@ const styles = StyleSheet.create({
     fontWeight: '800' as const,
     color: Colors.light.text,
   },
+  dealtWithTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  confirmStatusText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: Colors.light.textSecondary,
+  },
   undoText: {
     fontSize: 13,
     fontWeight: '800' as const,
     color: Colors.light.primary,
+  },
+  pendingBadge: {
+    backgroundColor: palette.amber,
+    borderWidth: 2,
+    borderColor: INK,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignSelf: 'flex-start',
+  },
+  pendingBadgeText: {
+    fontSize: 13,
+    fontWeight: '900' as const,
+    color: INK,
+  },
+  paymentMethodsLabel: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: Colors.light.textSecondary,
+    alignSelf: 'center',
+  },
+  dealActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 8,
+  },
+  dealActionsPrimary: {
+    flex: 1,
+    marginTop: 0,
+  },
+  cancelDealButton: {
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+  },
+  offerInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.light.card,
+    borderWidth: 2.5,
+    borderColor: INK,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  offerInputPrefix: {
+    fontSize: 16,
+    fontWeight: '900' as const,
+    color: Colors.light.text,
+  },
+  offerInput: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: Colors.light.text,
+  },
+  messageSellerLink: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  messageSellerLinkText: {
+    fontSize: 13,
+    fontWeight: '800' as const,
+    color: Colors.light.textSecondary,
+    textDecorationLine: 'underline',
+  },
+  offerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+  },
+  offerRowBody: {
+    flex: 1,
+    gap: 2,
+  },
+  offerAmountText: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: Colors.light.textSecondary,
+  },
+  offerRowActions: {
+    gap: 6,
+    alignItems: 'flex-end',
+  },
+  offerAcceptText: {
+    fontSize: 13,
+    fontWeight: '800' as const,
+    color: Colors.light.primary,
+  },
+  offerDeclineText: {
+    fontSize: 13,
+    fontWeight: '800' as const,
+    color: Colors.light.error,
   },
   inquirerRow: {
     flexDirection: 'row',

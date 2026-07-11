@@ -11,7 +11,7 @@ export const profilesRouter = createTRPCRouter({
 
       const { data: profile, error } = await ctx.supabase
         .from("profiles")
-        .select("id, name, avatar_url, major, year, bio, interests, created_at")
+        .select("id, name, avatar_url, major, year, bio, interests, instagram, linkedin, linktree, website, points, created_at")
         .eq("id", userId)
         .maybeSingle();
 
@@ -53,6 +53,11 @@ export const profilesRouter = createTRPCRouter({
         year: profile.year,
         bio: profile.bio,
         interests: profile.interests || [],
+        instagram: profile.instagram,
+        linkedin: profile.linkedin,
+        linktree: profile.linktree,
+        website: profile.website,
+        points: profile.points ?? 0,
         createdAt: profile.created_at,
         relationship,
         connectionId,
@@ -178,6 +183,74 @@ export const profilesRouter = createTRPCRouter({
           connectionId,
         };
       });
+    }),
+
+  suggestions: protectedProcedure
+    .input(
+      z.object({
+        limit: z.number().min(1).max(20).default(10),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const viewerId = ctx.user.id;
+      const { limit } = input;
+
+      const { data: viewer, error: viewerError } = await ctx.supabase
+        .from("profiles")
+        .select("major, year, interests")
+        .eq("id", viewerId)
+        .maybeSingle();
+
+      if (viewerError) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: viewerError.message });
+      }
+
+      const { data: existingConnections, error: connError } = await ctx.supabase
+        .from("connections")
+        .select("user_id, connected_user_id")
+        .or(`user_id.eq.${viewerId},connected_user_id.eq.${viewerId}`);
+
+      if (connError) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: connError.message });
+      }
+
+      const excludeIds = new Set<string>([viewerId]);
+      (existingConnections ?? []).forEach((c: any) => {
+        excludeIds.add(c.user_id);
+        excludeIds.add(c.connected_user_id);
+      });
+
+      const { data: candidates, error: candidatesError } = await ctx.supabase
+        .from("profiles")
+        .select("id, name, avatar_url, major, year, interests")
+        .not("id", "in", `(${Array.from(excludeIds).join(",")})`);
+
+      if (candidatesError) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: candidatesError.message });
+      }
+
+      const viewerInterests = new Set(viewer?.interests ?? []);
+
+      const scored = (candidates ?? []).map((p: any) => {
+        let score = 0;
+        if (viewer?.major && p.major && p.major === viewer.major) score += 3;
+        if (viewer?.year && p.year && p.year === viewer.year) score += 1;
+        const overlap = (p.interests ?? []).filter((i: string) => viewerInterests.has(i)).length;
+        score += overlap;
+        return { profile: p, score };
+      });
+
+      scored.sort((a, b) => b.score - a.score);
+
+      return scored.slice(0, limit).map(({ profile: p }) => ({
+        id: p.id,
+        name: p.name,
+        avatar: p.avatar_url,
+        major: p.major,
+        year: p.year,
+        relationship: "none" as const,
+        connectionId: null as string | null,
+      }));
     }),
 });
 

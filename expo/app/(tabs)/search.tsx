@@ -37,6 +37,11 @@ export default function SearchScreen() {
     { enabled: debouncedQuery.length > 0 && mode === 'people' }
   );
 
+  const suggestionsQuery = trpc.profiles.suggestions.useQuery(
+    { limit: 10 },
+    { enabled: debouncedQuery.length === 0 && mode === 'people' }
+  );
+
   const postsSearchQuery = trpc.posts.getInfinite.useInfiniteQuery(
     { limit: 20, search: debouncedQuery },
     { enabled: debouncedQuery.length > 0 && mode === 'posts', getNextPageParam: (last) => last.nextCursor }
@@ -45,13 +50,22 @@ export default function SearchScreen() {
   const posts = postsSearchQuery.data?.pages.flatMap((page) => page.items) ?? [];
 
   const sendRequest = trpc.connections.sendRequest.useMutation({
-    onSuccess: () => peopleQuery.refetch(),
+    onSuccess: () => {
+      peopleQuery.refetch();
+      suggestionsQuery.refetch();
+    },
   });
   const respond = trpc.connections.respond.useMutation({
-    onSuccess: () => peopleQuery.refetch(),
+    onSuccess: () => {
+      peopleQuery.refetch();
+      suggestionsQuery.refetch();
+    },
   });
   const removeConnection = trpc.connections.remove.useMutation({
-    onSuccess: () => peopleQuery.refetch(),
+    onSuccess: () => {
+      peopleQuery.refetch();
+      suggestionsQuery.refetch();
+    },
   });
 
   const renderPersonRow = (item: PersonResult) => {
@@ -128,10 +142,23 @@ export default function SearchScreen() {
       </View>
 
       {debouncedQuery.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>Find people or posts</Text>
-          <Text style={styles.emptySubtitle}>Start typing to search TitanConnect.</Text>
-        </View>
+        mode === 'people' ? (
+          <ScrollView contentContainerStyle={styles.results} keyboardShouldPersistTaps="handled">
+            <Text style={styles.suggestedTitle}>Suggested Friends</Text>
+            {suggestionsQuery.isLoading ? (
+              <ActivityIndicator color={Colors.light.primary} style={styles.loader} />
+            ) : suggestionsQuery.data && suggestionsQuery.data.length > 0 ? (
+              suggestionsQuery.data.map((item) => renderPersonRow(item))
+            ) : (
+              <Text style={styles.emptySubtitle}>No suggestions yet.</Text>
+            )}
+          </ScrollView>
+        ) : (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>Find people or posts</Text>
+            <Text style={styles.emptySubtitle}>Start typing to search TitanConnect.</Text>
+          </View>
+        )
       ) : mode === 'people' ? (
         <ScrollView contentContainerStyle={styles.results} keyboardShouldPersistTaps="handled">
           {peopleQuery.isLoading ? (
@@ -217,6 +244,12 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: Colors.light.textSecondary,
     textAlign: 'center',
+  },
+  suggestedTitle: {
+    fontSize: 15,
+    fontWeight: '900' as const,
+    color: Colors.light.text,
+    marginBottom: 2,
   },
   results: {
     padding: 16,

@@ -5,6 +5,7 @@ import { showAlert } from '@/lib/alert';
 import { getFriendlyErrorMessage } from '@/lib/errors';
 import * as ImagePicker from 'expo-image-picker';
 import Colors, { INK, palette } from '@/constants/colors';
+import { PAYMENT_METHODS } from '@/constants/paymentMethods';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
 import { Post, Comment } from '@/types';
@@ -112,6 +113,7 @@ export default function HomeScreen() {
   const [newPrice, setNewPrice] = useState<string>('');
   const [selectedPriceOption, setSelectedPriceOption] = useState<string | null>(null);
   const [selectedCondition, setSelectedCondition] = useState<string | null>(null);
+  const [selectedPaymentMethods, setSelectedPaymentMethods] = useState<string[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedMediaType, setSelectedMediaType] = useState<'image' | 'video'>('image');
   const [anonSubtype, setAnonSubtype] = useState<AnonSubtype>('thought');
@@ -169,6 +171,7 @@ export default function HomeScreen() {
     {
       limit: 10,
       category: 'all',
+      sort: 'hot',
     },
     {
       getNextPageParam: (lastPage) => lastPage.nextCursor,
@@ -267,6 +270,7 @@ export default function HomeScreen() {
     setNewPrice('');
     setSelectedPriceOption(null);
     setSelectedCondition(null);
+    setSelectedPaymentMethods([]);
     setSelectedImage(null);
     setSelectedMediaType('image');
     setAnonSubtype('thought');
@@ -511,6 +515,7 @@ export default function HomeScreen() {
         course: newCourse.trim() || undefined,
         price,
         condition: selectedCondition ?? undefined,
+        paymentMethods: selectedPaymentMethods.length ? selectedPaymentMethods : undefined,
         tags: selectedTags.length ? selectedTags : undefined,
         joinPolicy: createType === 'study' ? joinPolicy : undefined,
         taggedUserIds: createType === 'all' && taggedUserIds.length ? taggedUserIds : undefined,
@@ -1457,6 +1462,24 @@ export default function HomeScreen() {
                       variant={selectedCondition === option ? 'solid' : 'outline'}
                       color={palette.orange}
                       onPress={() => setSelectedCondition(selectedCondition === option ? null : option)}
+                    />
+                  ))}
+                </View>
+                <Text style={styles.fieldLabel}>Accepted Payment (optional)</Text>
+                <View style={styles.chipRow}>
+                  {PAYMENT_METHODS.map((method) => (
+                    <Chip
+                      key={method}
+                      label={method}
+                      variant={selectedPaymentMethods.includes(method) ? 'solid' : 'outline'}
+                      color={palette.skyBlue}
+                      onPress={() =>
+                        setSelectedPaymentMethods(
+                          selectedPaymentMethods.includes(method)
+                            ? selectedPaymentMethods.filter((m) => m !== method)
+                            : [...selectedPaymentMethods, method]
+                        )
+                      }
                     />
                   ))}
                 </View>

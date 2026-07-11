@@ -11,6 +11,36 @@ export interface User {
   isEmailVerified?: boolean;
   isProfileComplete?: boolean;
   role?: 'student' | 'faculty';
+  instagram?: string;
+  linkedin?: string;
+  linktree?: string;
+  website?: string;
+  points?: number;
+}
+
+export interface Notification {
+  id: string;
+  type:
+    | 'message'
+    | 'connection_request'
+    | 'connection_accepted'
+    | 'offer_new'
+    | 'offer_accepted'
+    | 'offer_declined'
+    | 'deal_confirmed'
+    | 'post_like'
+    | 'post_comment'
+    | 'post_tag';
+  actorId?: string;
+  actorName?: string;
+  actorAvatar?: string;
+  postId?: string;
+  postTitle?: string;
+  conversationId?: string;
+  connectionId?: string;
+  offerId?: string;
+  read: boolean;
+  createdAt: string;
 }
 
 export interface Post {
@@ -36,6 +66,8 @@ export interface Post {
   tags?: string[];
   dealtWithUserId?: string;
   dealtWithUserName?: string;
+  listingStatus?: 'available' | 'pending' | 'sold';
+  paymentMethods?: string[];
   joinPolicy?: 'open' | 'approval';
   joinRequestStatus?: 'pending' | 'approved' | 'declined';
   mediaType?: 'image' | 'video';
@@ -80,6 +112,18 @@ export interface Connection {
   connectedUserId: string;
   status: 'pending' | 'accepted' | 'blocked';
   createdAt: string;
+}
+
+export interface MarketplaceOffer {
+  id: string;
+  postId: string;
+  buyerId: string;
+  buyerName?: string;
+  buyerAvatar?: string;
+  amount: number;
+  status: 'pending' | 'accepted' | 'declined' | 'withdrawn' | 'cancelled';
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Profile extends User {

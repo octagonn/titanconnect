@@ -1,18 +1,17 @@
 // app/(tabs)/profile.tsx
 import { useRouter, useNavigation } from 'expo-router';
-import { LogOut, Mail, GraduationCap, Award, Heart, Edit2, Image as ImageIcon, Save, Pencil, University, Check, FileText, Users } from 'lucide-react-native';
+import { LogOut, Mail, GraduationCap, Award, Heart, Edit2, Image as ImageIcon, Save, Pencil, University, Check, FileText, Users, Star } from 'lucide-react-native';
 import { useLayoutEffect, useCallback, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Modal, TextInput, KeyboardAvoidingView, Platform, ActionSheetIOS, ActivityIndicator } from 'react-native';
 import { showAlert } from '@/lib/alert';
 import * as ImagePicker from 'expo-image-picker';
 import { BlurView } from 'expo-blur';
-import { Buffer } from 'buffer';
-import * as FileSystem from 'expo-file-system/legacy';
 import Colors, { INK, palette } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/lib/supabase';
 import { uploadImage } from '@/lib/storage';
+import { uploadProfilePicture } from '@/lib/uploadProfilePicture';
 import styles from '../../styles/profile.styles';
 import { INTERESTS } from '@/constants/interests';
 import Avatar from '@/components/ui/Avatar';
@@ -37,6 +36,10 @@ export default function ProfileScreen() {
   const [bio, setBio] = useState(currentUser?.bio || '');
   const [selectedInterests, setSelectedInterests] = useState<string[]>(currentUser?.interests || []);
   const [avatarUri, setAvatarUri] = useState<string | undefined>(currentUser?.avatar);
+  const [instagram, setInstagram] = useState(currentUser?.instagram || '');
+  const [linkedin, setLinkedin] = useState(currentUser?.linkedin || '');
+  const [linktree, setLinktree] = useState(currentUser?.linktree || '');
+  const [website, setWebsite] = useState(currentUser?.website || '');
 
   // Bio states (from incoming branch)
   const [isAddingBio, setIsAddingBio] = useState(false);
@@ -56,6 +59,10 @@ export default function ProfileScreen() {
     setBio(currentUser.bio || '');
     setSelectedInterests(currentUser.interests || []);
     setAvatarUri(currentUser.avatar);
+    setInstagram(currentUser.instagram || '');
+    setLinkedin(currentUser.linkedin || '');
+    setLinktree(currentUser.linktree || '');
+    setWebsite(currentUser.website || '');
   }, [currentUser, isEditing]);
 
   // Force avatar url to update after user changes it
@@ -137,75 +144,6 @@ export default function ProfileScreen() {
       setNewBio(text);
     }
   };
-
-  if (typeof global.Buffer === "undefined") {
-    global.Buffer = Buffer;
-  }
-
-  const uploadProfilePicture = async (uri: string, userId: string) => {
-    try {
-      console.log("STEP 1: Upload started. URI =", uri);
-
-      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: "base64" });
-      const fileBytes = Buffer.from(base64, "base64");
-
-      const filePath = `${userId}.jpg`; // ALWAYS same name for each corresponding user
-
-      console.log("STEP 2: Checking if file exists…");
-
-      // List objects in the bucket root
-      const { data: existingFiles } = await supabase.storage
-        .from("avatars")
-        .list("", { search: filePath });
-
-      const fileExists = existingFiles?.some((f) => f.name === filePath);
-
-      let result, error;
-
-      if (fileExists) {
-        console.log("STEP 3: File exists → using update()");
-        ({ data: result, error } = await supabase.storage
-          .from("avatars")
-          .update(filePath, fileBytes, {
-            contentType: "image/jpeg",
-          }));
-      } else {
-        console.log("STEP 3: File does not exist → using upload()");
-        ({ data: result, error } = await supabase.storage
-          .from("avatars")
-          .upload(filePath, fileBytes, {
-            contentType: "image/jpeg",
-          }));
-      }
-
-      console.log("STEP 4: Upload/update response:", { result, error });
-
-      if (error) {
-        showAlert(
-          "Upload Failed",
-          `Message: ${error.message}\nRaw:\n${JSON.stringify(error, null, 2)}`
-        );
-        return null;
-      }
-
-      const { data: urlData } = supabase.storage
-        .from("avatars")
-        .getPublicUrl(filePath);
-
-      // Add a version query param when uploading avatar_urls so CDN treats it as a different file (To avoid stale/caching issues)
-      const freshUrl = `${urlData.publicUrl}?v=${Date.now()}`;
-
-      console.log("STEP 5: Fresh Public URL:", freshUrl);
-      return freshUrl;
-
-
-    } catch (err: any) {
-      console.log("UNEXPECTED ERROR:", err);
-      showAlert("Unexpected Error", err.message || err.toString());
-      return null;
-    }
-  };
-
 
   const pickAndUploadProfilePic = async (source: 'camera' | 'library') => {
     if (!currentUser) return;
@@ -348,6 +286,10 @@ export default function ProfileScreen() {
         bio: bio.trim(),
         interests: selectedInterests,
         avatar: uploadedAvatar,
+        instagram: instagram.trim(),
+        linkedin: linkedin.trim(),
+        linktree: linktree.trim(),
+        website: website.trim(),
       });
       setIsEditing(false);
     } catch (err) {
@@ -355,7 +297,7 @@ export default function ProfileScreen() {
     } finally {
       setSaving(false);
     }
-  }, [avatarUri, bio, currentUser, selectedInterests, major, name, updateUser, year]);
+  }, [avatarUri, bio, currentUser, selectedInterests, major, name, updateUser, year, instagram, linkedin, linktree, website]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -399,6 +341,10 @@ export default function ProfileScreen() {
           <View style={styles.majorAndYearContainer}>
             <Text style={styles.major}>{currentUser.major}</Text>
             <Chip label={currentUser.year || ''} variant="solid" color={palette.orange} />
+          </View>
+          <View style={styles.pointsBadge}>
+            <Star size={13} color={INK} strokeWidth={2.5} fill={INK} />
+            <Text style={styles.pointsBadgeText}>{currentUser.points ?? 0} points</Text>
           </View>
 
           {!currentUser.bio && !isAddingBio && (
@@ -617,6 +563,57 @@ export default function ProfileScreen() {
                 placeholder="Tell us about yourself"
                 placeholderTextColor={Colors.light.placeholder}
                 multiline
+              />
+            </View>
+
+            <View style={styles.editField}>
+              <Text style={styles.editLabel}>Instagram</Text>
+              <TextInput
+                value={instagram}
+                onChangeText={setInstagram}
+                style={styles.editInput}
+                placeholder="Instagram username"
+                placeholderTextColor={Colors.light.placeholder}
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.editField}>
+              <Text style={styles.editLabel}>LinkedIn</Text>
+              <TextInput
+                value={linkedin}
+                onChangeText={setLinkedin}
+                style={styles.editInput}
+                placeholder="LinkedIn profile URL"
+                placeholderTextColor={Colors.light.placeholder}
+                autoCapitalize="none"
+                keyboardType="url"
+              />
+            </View>
+
+            <View style={styles.editField}>
+              <Text style={styles.editLabel}>Linktree</Text>
+              <TextInput
+                value={linktree}
+                onChangeText={setLinktree}
+                style={styles.editInput}
+                placeholder="Linktree URL"
+                placeholderTextColor={Colors.light.placeholder}
+                autoCapitalize="none"
+                keyboardType="url"
+              />
+            </View>
+
+            <View style={styles.editField}>
+              <Text style={styles.editLabel}>Website</Text>
+              <TextInput
+                value={website}
+                onChangeText={setWebsite}
+                style={styles.editInput}
+                placeholder="Website URL"
+                placeholderTextColor={Colors.light.placeholder}
+                autoCapitalize="none"
+                keyboardType="url"
               />
             </View>
 

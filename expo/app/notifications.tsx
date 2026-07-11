@@ -9,6 +9,18 @@ import ListRow from '@/components/ui/ListRow';
 import Chip from '@/components/ui/Chip';
 import HardShadow from '@/components/ui/HardShadow';
 
+const ACTIVITY_COPY: Record<string, string> = {
+  message: 'sent you a message',
+  connection_accepted: 'accepted your connection request',
+  offer_new: 'made an offer on your listing',
+  offer_accepted: 'accepted your offer',
+  offer_declined: 'declined your offer',
+  deal_confirmed: 'confirmed the deal',
+  post_like: 'liked your post',
+  post_comment: 'commented on your post',
+  post_tag: 'tagged you in a post',
+};
+
 export default function NotificationsScreen() {
   const router = useRouter();
   const { connections, conversations, connectionsQuery } = useApp();
@@ -33,7 +45,30 @@ export default function NotificationsScreen() {
     onSuccess: () => connectionsQuery.refetch(),
   });
 
-  const hasNothing = incoming.length === 0 && outgoing.length === 0 && unreadConversations.length === 0;
+  const utils = trpc.useUtils();
+  const activityQuery = trpc.notifications.list.useQuery({ limit: 30 });
+  const activity = activityQuery.data?.items ?? [];
+
+  const markRead = trpc.notifications.markRead.useMutation({
+    onSuccess: () => {
+      utils.notifications.list.invalidate();
+      utils.notifications.unreadCount.invalidate();
+    },
+  });
+
+  const handleActivityPress = (item: (typeof activity)[number]) => {
+    if (!item.read) markRead.mutate({ notificationId: item.id });
+    if (item.type === 'message' && item.conversationId) {
+      router.push(`/chat/${item.conversationId}` as any);
+    } else if (item.type === 'connection_accepted' && item.actorId) {
+      router.push(`/profile/${item.actorId}` as any);
+    } else if (item.postId) {
+      router.push(`/post/${item.postId}` as any);
+    }
+  };
+
+  const hasNothing =
+    incoming.length === 0 && outgoing.length === 0 && unreadConversations.length === 0 && activity.length === 0;
 
   return (
     <View style={styles.container}>
@@ -134,6 +169,28 @@ export default function NotificationsScreen() {
                       title={conv.otherUser?.name || 'New message'}
                       subtitle={`${conv.unreadCount} unread`}
                       onPress={() => router.push(`/chat/${conv.id}` as any)}
+                    />
+                  ))}
+                </View>
+              </View>
+            </View>
+          )}
+
+          {activity.length > 0 && (
+            <View style={styles.sectionWrap}>
+              <HardShadow offset={6} radius={20} />
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Activity</Text>
+                <View style={styles.rowList}>
+                  {activity.map((item) => (
+                    <ListRow
+                      key={item.id}
+                      avatarUri={item.actorAvatar}
+                      avatarName={item.actorName || 'TitanConnect'}
+                      title={item.actorName || 'Someone'}
+                      subtitle={ACTIVITY_COPY[item.type] || 'sent you an update'}
+                      unread={!item.read}
+                      onPress={() => handleActivityPress(item)}
                     />
                   ))}
                 </View>

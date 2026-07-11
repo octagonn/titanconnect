@@ -58,6 +58,23 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: Colors.light.textSecondary,
   },
+  pointsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: palette.amber,
+    borderWidth: 2,
+    borderColor: INK,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginBottom: 8,
+  },
+  pointsBadgeText: {
+    fontSize: 13,
+    fontWeight: '900' as const,
+    color: INK,
+  },
   bioSection: {
     alignItems: 'center',
     marginTop: 16,

@@ -99,7 +99,12 @@ export default function MarketplacePreview() {
               </View>
               <View style={styles.body}>
                 <Text style={styles.title} numberOfLines={2}>{item.title || 'Untitled listing'}</Text>
-                {!!item.dealtWithUserId && (
+                {item.listingStatus === 'pending' && (
+                  <View style={styles.pendingBadge}>
+                    <Text style={styles.pendingBadgeText}>Pending</Text>
+                  </View>
+                )}
+                {item.listingStatus === 'sold' && (
                   <View style={styles.soldBadge}>
                     <Text style={styles.soldBadgeText}>Sold</Text>
                   </View>
@@ -218,6 +223,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700' as const,
     color: Colors.light.textSecondary,
+  },
+  pendingBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: palette.amber,
+    borderWidth: 1.5,
+    borderColor: INK,
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    marginTop: 2,
+  },
+  pendingBadgeText: {
+    fontSize: 10,
+    fontWeight: '900' as const,
+    color: INK,
   },
   soldBadge: {
     alignSelf: 'flex-start',

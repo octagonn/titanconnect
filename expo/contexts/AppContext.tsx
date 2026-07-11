@@ -3,17 +3,24 @@ import { useMemo, useState } from 'react';
 import { ConnectionWithUser, Conversation } from '@/types';
 import { useAuth } from './AuthContext';
 import { trpc } from '@/lib/trpc';
+import { useNotificationRealtime } from '@/hooks/useNotificationRealtime';
 
 export const [AppContext, useApp] = createContextHook(() => {
   const { currentUser } = useAuth();
   const utils = trpc.useUtils();
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
 
+  useNotificationRealtime();
+
   const connectionsQuery = trpc.connections.list.useQuery(undefined, {
     enabled: !!currentUser,
   });
 
   const conversationsQuery = trpc.messages.listConversations.useQuery(undefined, {
+    enabled: !!currentUser,
+  });
+
+  const notificationsUnreadCountQuery = trpc.notifications.unreadCount.useQuery(undefined, {
     enabled: !!currentUser,
   });
 
@@ -45,14 +52,10 @@ export const [AppContext, useApp] = createContextHook(() => {
   const connections = (connectionsQuery.data as ConnectionWithUser[] | undefined) ?? [];
   const conversations = (conversationsQuery.data as any[] | undefined) ?? [];
 
-  // Combined badge count for the notifications bell: incoming friend
-  // requests + unread messages (the same two categories the notifications
-  // screen lists).
-  const incomingRequestCount = useMemo(
-    () => connections.filter((c) => c.status === 'pending' && c.direction === 'incoming').length,
-    [connections]
-  );
-  const notificationCount = incomingRequestCount + unreadCount;
+  // Badge count for the notifications bell: unread rows in the notifications
+  // table, which already covers messages, connections, marketplace offers,
+  // and post engagement.
+  const notificationCount = notificationsUnreadCountQuery.data ?? 0;
 
   return {
     connections,

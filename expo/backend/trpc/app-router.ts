@@ -6,6 +6,8 @@ import { messagesRouter } from "./routes/messages/route";
 import { profilesRouter } from "./routes/profiles/route";
 import { profileQrRouter } from "./routes/profile-qr/route";
 import { reportsRouter } from "./routes/reports/route";
+import { offersRouter } from "./routes/offers/route";
+import { notificationsRouter } from "./routes/notifications/route";
 
 export const appRouter = createTRPCRouter({
   example: createTRPCRouter({
@@ -17,6 +19,8 @@ export const appRouter = createTRPCRouter({
   profiles: profilesRouter,
   profileQr: profileQrRouter,
   reports: reportsRouter,
+  offers: offersRouter,
+  notifications: notificationsRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -1,6 +1,7 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Linking } from 'react-native';
+import { Instagram, Linkedin, Link as LinkIcon, Star } from 'lucide-react-native';
 import { showAlert } from '@/lib/alert';
 import Colors, { INK, palette } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -172,6 +173,10 @@ export default function OtherProfileScreen() {
             <Avatar uri={profile.avatar} name={profile.name} size={120} />
             <Text style={styles.name}>{profile.name}</Text>
             <Text style={styles.major}>{profile.major}</Text>
+            <View style={styles.pointsBadge}>
+              <Star size={13} color={INK} strokeWidth={2.5} fill={INK} />
+              <Text style={styles.pointsBadgeText}>{profile.points ?? 0} points</Text>
+            </View>
           </View>
 
           {renderActionButton()}
@@ -183,6 +188,57 @@ export default function OtherProfileScreen() {
                 <HardShadow offset={6} radius={20} />
                 <View style={styles.card}>
                   <Text style={styles.bodyText}>{profile.bio}</Text>
+                </View>
+              </View>
+            </View>
+          ) : null}
+
+          {profile.instagram || profile.linkedin || profile.linktree || profile.website ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Links</Text>
+              <View style={styles.cardWrap}>
+                <HardShadow offset={6} radius={20} />
+                <View style={[styles.card, styles.rowList]}>
+                  {profile.instagram ? (
+                    <TouchableOpacity
+                      style={styles.linkRow}
+                      onPress={() => Linking.openURL(`https://instagram.com/${profile.instagram}`)}
+                      activeOpacity={0.7}
+                    >
+                      <Instagram size={18} color={INK} strokeWidth={2.5} />
+                      <Text style={styles.linkRowText}>@{profile.instagram}</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {profile.linkedin ? (
+                    <TouchableOpacity
+                      style={styles.linkRow}
+                      onPress={() => Linking.openURL(profile.linkedin!)}
+                      activeOpacity={0.7}
+                    >
+                      <Linkedin size={18} color={INK} strokeWidth={2.5} />
+                      <Text style={styles.linkRowText}>LinkedIn</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {profile.linktree ? (
+                    <TouchableOpacity
+                      style={styles.linkRow}
+                      onPress={() => Linking.openURL(profile.linktree!)}
+                      activeOpacity={0.7}
+                    >
+                      <LinkIcon size={18} color={INK} strokeWidth={2.5} />
+                      <Text style={styles.linkRowText}>Linktree</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {profile.website ? (
+                    <TouchableOpacity
+                      style={styles.linkRow}
+                      onPress={() => Linking.openURL(profile.website!)}
+                      activeOpacity={0.7}
+                    >
+                      <LinkIcon size={18} color={INK} strokeWidth={2.5} />
+                      <Text style={styles.linkRowText}>Website</Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               </View>
             </View>
@@ -287,6 +343,23 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: Colors.light.textSecondary,
   },
+  pointsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: palette.amber,
+    borderWidth: 2,
+    borderColor: INK,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginTop: 6,
+  },
+  pointsBadgeText: {
+    fontSize: 13,
+    fontWeight: '900' as const,
+    color: INK,
+  },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -331,5 +404,15 @@ const styles = StyleSheet.create({
   },
   rowList: {
     gap: 10,
+  },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  linkRowText: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: Colors.light.text,
   },
 });
