@@ -109,6 +109,12 @@ export default function TapInScreen() {
     }
   }, [currentUser, ensureToken]);
 
+  const retryToken = useCallback(() => {
+    setQrError(false);
+    hasAttemptedToken.current = false;
+    ensureToken();
+  }, [ensureToken]);
+
   useEffect(() => {
     if (resolveToken.isError) {
       showAlert('Invalid QR Code', 'This code is not recognized.');
@@ -162,7 +168,12 @@ export default function TapInScreen() {
                       <Text style={styles.qrUserId}>{qrData.payload}</Text>
                     </>
                   ) : qrError ? (
-                    <Text style={styles.qrUserId}>QR code unavailable right now. Please try again later.</Text>
+                    <>
+                      <Text style={styles.qrUserId}>QR code unavailable right now. Please try again later.</Text>
+                      <TouchableOpacity style={styles.qrRetryButton} onPress={retryToken}>
+                        <Text style={styles.qrRetryButtonText}>Try Again</Text>
+                      </TouchableOpacity>
+                    </>
                   ) : (
                     <Text style={styles.qrUserId}>Generating...</Text>
                   )}
@@ -314,6 +325,20 @@ const styles = StyleSheet.create({
     color: Colors.light.textSecondary,
     fontFamily: 'monospace' as const,
     letterSpacing: 2,
+  },
+  qrRetryButton: {
+    marginTop: 16,
+    borderWidth: 2,
+    borderColor: INK,
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: palette.blue,
+  },
+  qrRetryButtonText: {
+    fontSize: 14,
+    fontWeight: '900' as const,
+    color: '#FFFFFF',
   },
   instructionsWrap: {
     position: 'relative',

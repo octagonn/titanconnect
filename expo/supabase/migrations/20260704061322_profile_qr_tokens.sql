@@ -3,7 +3,7 @@
 -- authorization model (same as a share link), so select is open to anyone —
 -- only the owner may create their own row.
 create table if not exists public.profile_qr_tokens (
-  id uuid default uuid_generate_v4() primary key,
+  id uuid default extensions.uuid_generate_v4() primary key,
   user_id uuid references public.profiles(id) on delete cascade not null unique,
   token text not null unique,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null

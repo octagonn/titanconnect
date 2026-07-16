@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, ActivityIndicator, Image } from 'react-native';
 import { ShoppingBag, Tag, Bookmark } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -67,7 +67,11 @@ export default function MarketplacePreview() {
             <HardShadow offset={shadowOffset.raised} radius={20} />
             <View style={styles.card}>
               <View style={[styles.imageBlock, { backgroundColor: palette.skyBlue }]}>
-                <ShoppingBag size={28} color={INK} strokeWidth={2} />
+                {item.imageUrl ? (
+                  <Image source={{ uri: item.imageUrl }} style={styles.imagePreview} resizeMode="cover" />
+                ) : (
+                  <ShoppingBag size={28} color={INK} strokeWidth={2} />
+                )}
                 {!isOwnListing && (
                   <Pressable
                     style={({ pressed }) => [styles.saveBtn, { transform: [{ scale: pressed ? 0.88 : 1 }] }]}
@@ -167,6 +171,7 @@ const styles = StyleSheet.create({
     width: '45%',
   },
   card: {
+    height: 280,
     backgroundColor: Colors.light.card,
     borderRadius: 20,
     borderWidth: 3,
@@ -179,6 +184,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderBottomWidth: 3,
     borderBottomColor: INK,
+    overflow: 'hidden',
+  },
+  imagePreview: {
+    ...StyleSheet.absoluteFillObject,
   },
   saveBtn: {
     position: 'absolute',
@@ -210,6 +219,7 @@ const styles = StyleSheet.create({
     color: INK,
   },
   body: {
+    flex: 1,
     padding: 10,
     gap: 3,
   },
@@ -266,6 +276,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   messageBtn: {
+    marginTop: 'auto',
     borderWidth: 2,
     borderColor: INK,
     borderRadius: 10,

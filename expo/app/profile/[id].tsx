@@ -151,7 +151,7 @@ export default function OtherProfileScreen() {
   if (profileQuery.isLoading || !profileQuery.data) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Profile' }} />
+        <Stack.Screen options={{ title: '', headerTitle: () => null }} />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={Colors.light.primary} />
           <Text style={styles.loadingText}>Loading profile...</Text>
@@ -166,7 +166,7 @@ export default function OtherProfileScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: profile.name || 'Profile' }} />
+      <Stack.Screen options={{ title: '', headerTitle: () => null }} />
       <View style={styles.container}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>

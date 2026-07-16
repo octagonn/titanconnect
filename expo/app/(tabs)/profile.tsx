@@ -9,6 +9,7 @@ import { BlurView } from 'expo-blur';
 import Colors, { INK, palette } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
+import { trpc } from '@/lib/trpc';
 import { supabase } from '@/lib/supabase';
 import { uploadImage } from '@/lib/storage';
 import { uploadProfilePicture } from '@/lib/uploadProfilePicture';
@@ -25,6 +26,10 @@ export default function ProfileScreen() {
   const navigation = useNavigation();
   const { currentUser, signOut, updateUser } = useAuth();
   const { connections } = useApp();
+  const postsQuery = trpc.posts.getInfinite.useQuery(
+    { limit: 100, userId: currentUser?.id ?? '' },
+    { enabled: !!currentUser }
+  );
   
   // Edit modal states (from HEAD)
   const [isEditing, setIsEditing] = useState(false);
@@ -318,9 +323,9 @@ export default function ProfileScreen() {
     return null;
   }
 
-  const userPosts = [];
+  const userPosts = postsQuery.data?.items ?? [];
   const userConnections = connections.filter((c: any) => c.status === 'accepted');
-  const totalLikes = 0;
+  const totalLikes = userPosts.reduce((sum: number, p: any) => sum + (p.likes ?? 0), 0);
 
   return (
     <View style={styles.container}>

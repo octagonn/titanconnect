@@ -301,7 +301,7 @@ export default function PostDetailScreen() {
     ]);
   };
 
-  const headerScreen = <Stack.Screen options={{ title: post?.title || 'Post' }} />;
+  const headerScreen = <Stack.Screen options={{ title: '', headerTitle: () => null }} />;
 
   if (!postId) {
     return (
@@ -349,6 +349,7 @@ export default function PostDetailScreen() {
   return (
     <>
       {headerScreen}
+      <View style={styles.screenColumn}>
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.postCardWrap}>
       <HardShadow offset={8} radius={24} />
@@ -957,6 +958,7 @@ export default function PostDetailScreen() {
         </TouchableOpacity>
       </Modal>
 
+      </ScrollView>
       <View style={styles.addCommentBar}>
         <TextInput
           style={styles.commentInput}
@@ -984,7 +986,7 @@ export default function PostDetailScreen() {
           )}
         </TouchableOpacity>
       </View>
-      </ScrollView>
+      </View>
     </>
   );
 }
@@ -1004,13 +1006,16 @@ function getTimeAgo(dateString: string): string {
 }
 
 const styles = StyleSheet.create({
+  screenColumn: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: Colors.light.feedBackground,
   },
   contentContainer: {
     padding: 16,
-    paddingBottom: 80,
+    paddingBottom: 16,
     gap: 16,
   },
   centerContainer: {
